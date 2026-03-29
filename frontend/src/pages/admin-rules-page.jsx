@@ -8,6 +8,7 @@ import { Select } from "../components/ui/select";
 import { Switch } from "../components/ui/switch";
 import { Checkbox } from "../components/ui/checkbox";
 import { AppShell } from "../components/layout/app-shell";
+import { Badge } from "../components/ui/badge";
 import { Save } from "lucide-react";
 
 export function AdminRulesPage() {
@@ -104,6 +105,58 @@ export function AdminRulesPage() {
   };
 
   const selectedEmployee = employees.find((e) => String(e.id) === selectedUser);
+  const selectedApprovers = useMemo(
+    () => allApprovers.filter((a) => flow.approverIds.includes(a.id)),
+    [allApprovers, flow.approverIds]
+  );
+
+  const requiredApprovers = useMemo(
+    () => allApprovers.filter((a) => flow.requiredApproverIds.includes(a.id)),
+    [allApprovers, flow.requiredApproverIds]
+  );
+
+  const explanation = useMemo(() => {
+    if (!selectedEmployee) {
+      return ["Select an employee to generate a workflow explanation."];
+    }
+
+    if (selectedApprovers.length === 0) {
+      return [
+        `${selectedEmployee.name} currently has no approvers configured.`,
+        "Add at least one approver so the request can move beyond Draft.",
+      ];
+    }
+
+    const approverNames = selectedApprovers.map((a) => a.name).join(", ");
+    const requiredNames = requiredApprovers.length > 0
+      ? requiredApprovers.map((a) => a.name).join(", ")
+      : "None";
+
+    const managerLine = flow.manager_first
+      ? `Manager-first is ON, so ${selectedEmployee.manager_name || "the assigned manager"} is prioritized before other approvers when available.`
+      : "Manager-first is OFF, so the request starts with your configured approver set directly.";
+
+    const sequenceLine = flow.sequential
+      ? "Sequential mode is ON, so approval requests are sent one by one in the listed order."
+      : "Sequential mode is OFF, so approval requests are sent to all selected approvers in parallel.";
+
+    const thresholdLine = `Approval threshold is ${flow.min_approval_percentage}%, so at least that percentage of selected approvers must approve.`;
+
+    return [
+      `Configured approvers: ${approverNames}.`,
+      `Mandatory approvers: ${requiredNames}.`,
+      managerLine,
+      sequenceLine,
+      thresholdLine,
+    ];
+  }, [
+    selectedEmployee,
+    selectedApprovers,
+    requiredApprovers,
+    flow.manager_first,
+    flow.sequential,
+    flow.min_approval_percentage,
+  ]);
 
   return (
     <AppShell>
@@ -116,7 +169,7 @@ export function AdminRulesPage() {
         </div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "300px 1fr", gap: "1.5rem" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "300px 1fr", gap: "1.5rem" }} className="rules-layout-grid">
         {/* Left: Employee & Rule Details */}
         <div className="card" style={{ padding: "1.5rem" }}>
           <Select label="Employee" value={selectedUser} onChange={(e) => setSelectedUser(e.target.value)}>
@@ -167,7 +220,7 @@ export function AdminRulesPage() {
               <div style={{ marginBottom: "1.5rem" }}>
                 <span className="label" style={{ marginBottom: "0.75rem" }}>Approvers</span>
                 <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-                  {allApprovers.map((approver) => {
+                  {allApprovers.map((approver, idx) => {
                     const isSelected = flow.approverIds.includes(approver.id);
                     const isRequired = flow.requiredApproverIds.includes(approver.id);
                     return (
@@ -198,6 +251,9 @@ export function AdminRulesPage() {
                             {approver.name}
                           </span>
                           <span style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>({approver.role})</span>
+                          {isRequired && (
+                            <Badge status="pending">Mandatory</Badge>
+                          )}
                         </div>
                         {isSelected && (
                           <Checkbox
@@ -230,6 +286,25 @@ export function AdminRulesPage() {
                 <p style={{ fontSize: "0.78rem", color: "var(--text-muted)", marginBottom: "0.5rem" }}>
                   Expense approved when {flow.min_approval_percentage}% of approvers accept
                 </p>
+              </div>
+
+              <div
+                className="card"
+                style={{
+                  padding: "1rem",
+                  marginBottom: "1.5rem",
+                  background: "var(--surface-raised)",
+                  borderColor: "rgba(37, 99, 235, 0.25)",
+                }}
+              >
+                <span className="label" style={{ marginBottom: "0.5rem" }}>How this rule works</span>
+                <div style={{ display: "flex", flexDirection: "column", gap: "0.35rem" }}>
+                  {explanation.map((line, idx) => (
+                    <p key={idx} style={{ margin: 0, fontSize: "0.82rem", color: "var(--text-secondary)", lineHeight: 1.5 }}>
+                      {line}
+                    </p>
+                  ))}
+                </div>
               </div>
 
               {/* Save */}
