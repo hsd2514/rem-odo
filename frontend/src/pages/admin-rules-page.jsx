@@ -9,11 +9,13 @@ import { Switch } from "../components/ui/switch";
 import { Checkbox } from "../components/ui/checkbox";
 import { AppShell } from "../components/layout/app-shell";
 import { Badge } from "../components/ui/badge";
-import { Save } from "lucide-react";
+import { ArrowDown, ArrowUp, GripVertical, Save } from "lucide-react";
 
 export function AdminRulesPage() {
   const toast = useToast();
   const [selectedUser, setSelectedUser] = useState("");
+  const [draggedApproverId, setDraggedApproverId] = useState(null);
+  const [dragOverApproverId, setDragOverApproverId] = useState(null);
   const [flow, setFlow] = useState({
     description: "",
     manager_first: true,
@@ -88,10 +90,39 @@ export function AdminRulesPage() {
     }));
   };
 
+  const moveApprover = (approverId, direction) => {
+    setFlow((prev) => {
+      const current = [...prev.approverIds];
+      const idx = current.indexOf(approverId);
+      if (idx < 0) return prev;
+      const nextIdx = direction === "up" ? idx - 1 : idx + 1;
+      if (nextIdx < 0 || nextIdx >= current.length) return prev;
+      const [moved] = current.splice(idx, 1);
+      current.splice(nextIdx, 0, moved);
+      return { ...prev, approverIds: current };
+    });
+  };
+
+  const reorderApprover = (fromId, toId) => {
+    if (!fromId || !toId || fromId === toId) return;
+    setFlow((prev) => {
+      const current = [...prev.approverIds];
+      const fromIdx = current.indexOf(fromId);
+      const toIdx = current.indexOf(toId);
+      if (fromIdx < 0 || toIdx < 0) return prev;
+      const [moved] = current.splice(fromIdx, 1);
+      current.splice(toIdx, 0, moved);
+      return { ...prev, approverIds: current };
+    });
+  };
+
   const handleSave = () => {
     if (!selectedUser) {
       toast.error("Select an employee first");
       return;
+    }
+    if (!flow.sequential && flow.approverIds.length > 1) {
+      toast.info("Parallel mode enabled: order is saved but ignored during runtime approvals.");
     }
     saveMutation.mutate({
       user_id: Number(selectedUser),
@@ -106,7 +137,10 @@ export function AdminRulesPage() {
 
   const selectedEmployee = employees.find((e) => String(e.id) === selectedUser);
   const selectedApprovers = useMemo(
-    () => allApprovers.filter((a) => flow.approverIds.includes(a.id)),
+    () =>
+      flow.approverIds
+        .map((id) => allApprovers.find((a) => a.id === id))
+        .filter(Boolean),
     [allApprovers, flow.approverIds]
   );
 
@@ -268,6 +302,86 @@ export function AdminRulesPage() {
                 </div>
                 {allApprovers.length === 0 && (
                   <p style={{ color: "var(--text-muted)", fontSize: "0.8rem" }}>No managers/admins available. Create manager users first.</p>
+                )}
+              </div>
+
+              <div
+                className="card"
+                style={{
+                  padding: "0.9rem 1rem",
+                  marginBottom: "1.5rem",
+                  background: "var(--surface-raised)",
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem" }}>
+                  <span className="label" style={{ marginBottom: 0 }}>Approval Sequence Builder</span>
+                  <Badge status={flow.sequential ? "approved" : "pending"}>
+                    {flow.sequential ? "Sequential: ordered" : "Parallel: order ignored"}
+                  </Badge>
+                </div>
+
+                {selectedApprovers.length === 0 ? (
+                  <p style={{ margin: 0, fontSize: "0.8rem", color: "var(--text-muted)" }}>
+                    Select approvers above to build a sequence.
+                  </p>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                    {selectedApprovers.map((approver, idx) => (
+                      <div
+                        key={approver.id}
+                        draggable={flow.sequential}
+                        onDragStart={() => flow.sequential && setDraggedApproverId(approver.id)}
+                        onDragOver={(e) => {
+                          if (!flow.sequential) return;
+                          e.preventDefault();
+                          setDragOverApproverId(approver.id);
+                        }}
+                        onDragLeave={() => setDragOverApproverId(null)}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          if (!flow.sequential) return;
+                          reorderApprover(draggedApproverId, approver.id);
+                          setDragOverApproverId(null);
+                          setDraggedApproverId(null);
+                        }}
+                        onDragEnd={() => {
+                          setDragOverApproverId(null);
+                          setDraggedApproverId(null);
+                        }}
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          gap: "0.75rem",
+                          padding: "0.6rem 0.7rem",
+                          borderRadius: "var(--radius-sm)",
+                          border: `1px solid ${dragOverApproverId === approver.id ? "var(--accent)" : "var(--border)"}`,
+                          background: "var(--bg-base)",
+                          cursor: flow.sequential ? "grab" : "default",
+                        }}
+                      >
+                        <div style={{ display: "flex", alignItems: "center", gap: "0.55rem", minWidth: 0 }}>
+                          <span style={{ color: "var(--text-muted)", fontSize: "0.74rem", fontWeight: 700, minWidth: "1.5rem" }}>
+                            #{idx + 1}
+                          </span>
+                          <GripVertical size={14} style={{ color: "var(--text-muted)", opacity: flow.sequential ? 1 : 0.4 }} />
+                          <div style={{ minWidth: 0 }}>
+                            <p style={{ margin: 0, fontSize: "0.84rem", fontWeight: 600, color: "var(--text-primary)" }}>{approver.name}</p>
+                            <p style={{ margin: "0.08rem 0 0", fontSize: "0.72rem", color: "var(--text-muted)" }}>{approver.role}</p>
+                          </div>
+                          {flow.requiredApproverIds.includes(approver.id) && <Badge status="pending">Mandatory</Badge>}
+                        </div>
+                        <div style={{ display: "flex", gap: "0.25rem" }}>
+                          <Button size="xs" variant="ghost" disabled={!flow.sequential || idx === 0} onClick={() => moveApprover(approver.id, "up")}>
+                            <ArrowUp size={12} />
+                          </Button>
+                          <Button size="xs" variant="ghost" disabled={!flow.sequential || idx === selectedApprovers.length - 1} onClick={() => moveApprover(approver.id, "down")}>
+                            <ArrowDown size={12} />
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 )}
               </div>
 
