@@ -287,14 +287,42 @@ def team_expenses(
     _: User = Depends(require_role("manager", "admin")),
     current_user: User = Depends(get_current_user),
 ) -> list[ExpenseResponse]:
+    if current_user.role.value == "admin":
+        expenses = session.exec(
+            select(Expense).where(Expense.company_id == current_user.company_id)
+        ).all()
+        result = []
+        for item in expenses:
+            user = session.get(User, item.user_id)
+            result.append(_expense_to_response(item, user.name if user else ""))
+        return result
+
     mapped = session.exec(
         select(EmployeeManagerMap).where(EmployeeManagerMap.manager_id == current_user.id)
     ).all()
     employee_ids = [row.employee_id for row in mapped]
-    if not employee_ids:
+
+    step_expense_ids = session.exec(
+        select(ApprovalStep.expense_id).where(ApprovalStep.approver_id == current_user.id)
+    ).all()
+
+    if not employee_ids and not step_expense_ids:
         return []
 
-    expenses = session.exec(select(Expense).where(Expense.user_id.in_(employee_ids))).all()
+    expense_by_id: dict[int, Expense] = {}
+
+    if employee_ids:
+        mapped_expenses = session.exec(select(Expense).where(Expense.user_id.in_(employee_ids))).all()
+        for item in mapped_expenses:
+            expense_by_id[item.id] = item
+
+    if step_expense_ids:
+        assigned_expenses = session.exec(select(Expense).where(Expense.id.in_(step_expense_ids))).all()
+        for item in assigned_expenses:
+            if item.company_id == current_user.company_id:
+                expense_by_id[item.id] = item
+
+    expenses = list(expense_by_id.values())
     result = []
     for item in expenses:
         user = session.get(User, item.user_id)
