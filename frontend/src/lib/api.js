@@ -84,4 +84,19 @@ export const api = {
     request(`/approvals/${expenseId}/override-reject`, { method: "POST", body: JSON.stringify({ comment }) }),
   approvalLogs: (expenseId) => request(`/approvals/${expenseId}/logs`),
   approvalSteps: (expenseId) => request(`/approvals/${expenseId}/steps`),
+
+  // Analytics
+  analyticsSummary: (filters = {}) => request(`/analytics/summary${buildQuery(filters)}`),
+  analyticsMonthly: (filters = {}) => request(`/analytics/monthly-spend${buildQuery(filters)}`),
+  analyticsCategory: (filters = {}) => request(`/analytics/category-breakdown${buildQuery(filters)}`),
+  analyticsTeam: (filters = {}) => request(`/analytics/team-breakdown${buildQuery(filters)}`),
 };
+
+function buildQuery(filters) {
+  const params = new URLSearchParams();
+  if (filters.month) params.set("month", filters.month);
+  if (filters.category) params.set("category", filters.category);
+  if (filters.user_id) params.set("user_id", String(filters.user_id));
+  const qs = params.toString();
+  return qs ? `?${qs}` : "";
+}

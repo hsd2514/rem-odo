@@ -5,7 +5,7 @@ from pathlib import Path
 
 from app.core.config import settings
 from app.core.database import init_db
-from app.routers import approvals, auth, bootstrap, expenses, users, workflow
+from app.routers import analytics, approvals, audit, auth, bootstrap, expenses, users, workflow
 
 app = FastAPI(title="Reimbursement Management API")
 
@@ -27,11 +27,13 @@ def on_startup() -> None:
     init_db()
 
 
+app.include_router(analytics.router, prefix="/analytics", tags=["analytics"])
 app.include_router(auth.router, prefix="/auth", tags=["auth"])
 app.include_router(users.router, prefix="/users", tags=["users"])
 app.include_router(expenses.router, prefix="/expenses", tags=["expenses"])
 app.include_router(approvals.router, prefix="/approvals", tags=["approvals"])
 app.include_router(workflow.router, prefix="/workflow", tags=["workflow"])
+app.include_router(audit.router, prefix="/audit", tags=["audit"])
 app.include_router(bootstrap.router, prefix="/bootstrap", tags=["bootstrap"])
 app.include_router(bootstrap.router, prefix="/demo", tags=["legacy-demo"])
 

@@ -192,3 +192,49 @@ class OCRResult(BaseModel):
     vendor: str | None = None
     expense_date: str | None = None
     category_guess: str | None = None
+
+
+# ── Analytics ─────────────────────────────────────
+
+
+class AnalyticsSummary(BaseModel):
+    total_spend: float = 0.0
+    total_count: int = 0
+    pending_count: int = 0
+    pending_amount: float = 0.0
+    approved_count: int = 0
+    approved_amount: float = 0.0
+    rejected_count: int = 0
+    rejected_amount: float = 0.0
+    draft_count: int = 0
+    avg_expense: float = 0.0
+
+
+class MonthlySpendItem(BaseModel):
+    year: int
+    month: int
+    month_label: str = ""
+    total: float = 0.0
+    approved: float = 0.0
+    pending: float = 0.0
+    rejected: float = 0.0
+    draft: float = 0.0
+    count: int = 0
+
+
+class CategoryBreakdownItem(BaseModel):
+    category: str
+    total: float = 0.0
+    count: int = 0
+    percentage: float = 0.0
+
+
+class TeamBreakdownItem(BaseModel):
+    user_id: int
+    user_name: str
+    role: str
+    total_spend: float = 0.0
+    expense_count: int = 0
+    pending_count: int = 0
+    approved_count: int = 0
+    rejected_count: int = 0

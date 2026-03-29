@@ -1,11 +1,12 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/auth-context";
-import { LogOut, Shield, Users, Receipt, CheckCircle } from "lucide-react";
+import { LogOut, Shield, Users, Receipt, CheckCircle, BarChart3 } from "lucide-react";
 
 const NAV_BY_ROLE = {
   admin: [
     { to: "/admin", label: "User Management", icon: Users },
     { to: "/admin/rules", label: "Approval Rules", icon: Shield },
+    { to: "/admin/analytics", label: "Analytics", icon: BarChart3 },
   ],
   employee: [
     { to: "/employee", label: "My Expenses", icon: Receipt },
