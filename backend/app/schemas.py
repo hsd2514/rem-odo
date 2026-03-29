@@ -204,6 +204,18 @@ class ReceiptResponse(BaseModel):
     ocr_payload: dict = Field(default_factory=dict)
 
 
+class CurrencyPreviewResponse(BaseModel):
+    amount: float
+    from_currency: str
+    to_currency: str
+    converted_amount: float
+    rate: float
+    source: str
+    as_of: datetime
+    fallback: bool = False
+    message: str | None = None
+
+
 # ── Analytics ─────────────────────────────────────
 
 

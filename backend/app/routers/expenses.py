@@ -17,6 +17,7 @@ from app.models import (
 )
 from app.schemas import (
     ApprovalLogResponse,
+    CurrencyPreviewResponse,
     ExpenseTimelineResponse,
     ExpenseCreateRequest,
     ExpenseDetailResponse,
@@ -25,7 +26,7 @@ from app.schemas import (
     ReceiptResponse,
     TimelineEventResponse,
 )
-from app.services.currency import convert_currency
+from app.services.currency import convert_currency, get_conversion_preview
 from app.services.workflow import create_steps_for_expense
 
 router = APIRouter()
@@ -161,6 +162,26 @@ async def submit_expense(
     session.refresh(expense)
 
     return _expense_to_response(expense, current_user.name)
+
+
+@router.get("/preview-conversion", response_model=CurrencyPreviewResponse)
+async def preview_conversion(
+    amount: float,
+    from_currency: str,
+    to_currency: str | None = None,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> CurrencyPreviewResponse:
+    if amount < 0:
+        raise HTTPException(status_code=400, detail="Amount must be non-negative")
+
+    company = session.get(Company, current_user.company_id)
+    if not company:
+        raise HTTPException(status_code=404, detail="Company not found")
+
+    target_currency = (to_currency or company.default_currency).upper()
+    quote = await get_conversion_preview(amount, from_currency, target_currency)
+    return CurrencyPreviewResponse(**quote)
 
 
 @router.post("/upload-receipt", response_model=OCRResult)

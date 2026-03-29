@@ -1,4 +1,4 @@
-import { Fragment, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api";
 import { useToast } from "../context/toast-context";
@@ -127,6 +127,9 @@ export function EmployeePage() {
   const [showForm, setShowForm] = useState(false);
   const [selectedExpense, setSelectedExpense] = useState(null);
   const [submitWarnings, setSubmitWarnings] = useState(null); // { expenseId, description, warnings[] }
+  const [conversionPreview, setConversionPreview] = useState(null);
+  const [conversionLoading, setConversionLoading] = useState(false);
+  const [conversionError, setConversionError] = useState("");
   const [form, setForm] = useState({
     amount: "",
     category: "Food",
@@ -138,6 +141,7 @@ export function EmployeePage() {
   });
 
   const expensesQuery = useQuery({ queryKey: ["my-expenses"], queryFn: api.myExpenses });
+  const meQuery = useQuery({ queryKey: ["me"], queryFn: api.getMe });
 
   const createMutation = useMutation({
     mutationFn: api.createExpense,
@@ -182,6 +186,47 @@ export function EmployeePage() {
       paid_by: "Self", currency: "USD", remarks: "",
     });
   };
+
+  useEffect(() => {
+    const baseCurrency = meQuery.data?.default_currency;
+    const amount = Number(form.amount);
+    if (!showForm || !baseCurrency || !form.currency || !Number.isFinite(amount) || amount <= 0) {
+      setConversionPreview(null);
+      setConversionError("");
+      setConversionLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setConversionLoading(true);
+    setConversionError("");
+    const timer = setTimeout(async () => {
+      try {
+        const preview = await api.previewConversion({
+          amount,
+          from_currency: form.currency,
+          to_currency: baseCurrency,
+        });
+        if (!cancelled) {
+          setConversionPreview(preview);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setConversionPreview(null);
+          setConversionError(err.message || "Live conversion unavailable");
+        }
+      } finally {
+        if (!cancelled) {
+          setConversionLoading(false);
+        }
+      }
+    }, 450);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [showForm, form.amount, form.currency, meQuery.data?.default_currency]);
 
   const expenses = expensesQuery.data || [];
   const filtered = useMemo(() => {
@@ -309,6 +354,45 @@ export function EmployeePage() {
               <option>USD</option><option>INR</option><option>EUR</option><option>GBP</option><option>AED</option><option>JPY</option><option>CAD</option><option>AUD</option>
             </Select>
             <Input label="Amount" type="number" placeholder="567.00" value={form.amount} onChange={(e) => setForm((p) => ({ ...p, amount: e.target.value }))} />
+            <div style={{ gridColumn: "1 / -1" }}>
+              <div className="policy-warning-banner" style={{ marginTop: "0.2rem" }}>
+                <p style={{ margin: 0, fontWeight: 700, fontSize: "0.8rem", color: "var(--text-primary)" }}>
+                  Live Conversion Preview
+                </p>
+                {conversionLoading ? (
+                  <p style={{ margin: "0.3rem 0 0", fontSize: "0.78rem", color: "var(--text-muted)" }}>
+                    Fetching latest exchange rate...
+                  </p>
+                ) : conversionError ? (
+                  <p style={{ margin: "0.3rem 0 0", fontSize: "0.78rem", color: "var(--danger)" }}>
+                    {conversionError}
+                  </p>
+                ) : conversionPreview ? (
+                  <div style={{ marginTop: "0.3rem" }}>
+                    <p style={{ margin: 0, fontSize: "0.82rem", color: "var(--text-secondary)" }}>
+                      {conversionPreview.amount} {conversionPreview.from_currency} ≈{" "}
+                      <strong style={{ color: "var(--text-primary)" }}>
+                        {conversionPreview.converted_amount} {conversionPreview.to_currency}
+                      </strong>
+                    </p>
+                    <p style={{ margin: "0.2rem 0 0", fontSize: "0.75rem", color: "var(--text-muted)" }}>
+                      Rate: 1 {conversionPreview.from_currency} = {conversionPreview.rate} {conversionPreview.to_currency}
+                      {" · "}
+                      {new Date(conversionPreview.as_of).toLocaleString()}
+                    </p>
+                    {conversionPreview.fallback && (
+                      <p style={{ margin: "0.2rem 0 0", fontSize: "0.75rem", color: "var(--warning)" }}>
+                        {conversionPreview.message || "Using resilient fallback conversion."}
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <p style={{ margin: "0.3rem 0 0", fontSize: "0.78rem", color: "var(--text-muted)" }}>
+                    Enter an amount to preview conversion to company base currency.
+                  </p>
+                )}
+              </div>
+            </div>
             <div style={{ gridColumn: "1 / -1" }}>
               <Textarea label="Remarks" placeholder="Additional notes..." value={form.remarks} onChange={(e) => setForm((p) => ({ ...p, remarks: e.target.value }))} />
             </div>

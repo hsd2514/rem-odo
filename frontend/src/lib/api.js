@@ -67,6 +67,10 @@ export const api = {
   teamExpenses: () => request("/expenses/team"),
   getExpenseDetail: (id) => request(`/expenses/${id}`),
   getExpenseTimeline: (id) => request(`/expenses/${id}/timeline`),
+  previewConversion: ({ amount, from_currency, to_currency }) =>
+    request(
+      `/expenses/preview-conversion${buildQuery({ amount, from_currency, to_currency })}`
+    ),
   uploadReceipt: (file) => {
     const formData = new FormData();
     formData.append("file", file);
@@ -99,6 +103,9 @@ function buildQuery(filters) {
   if (filters.month) params.set("month", filters.month);
   if (filters.category) params.set("category", filters.category);
   if (filters.user_id) params.set("user_id", String(filters.user_id));
+  if (filters.amount !== undefined && filters.amount !== null) params.set("amount", String(filters.amount));
+  if (filters.from_currency) params.set("from_currency", filters.from_currency);
+  if (filters.to_currency) params.set("to_currency", filters.to_currency);
   const qs = params.toString();
   return qs ? `?${qs}` : "";
 }
