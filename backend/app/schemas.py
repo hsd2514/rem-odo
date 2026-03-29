@@ -193,6 +193,13 @@ class OCRResult(BaseModel):
     vendor: str | None = None
     expense_date: str | None = None
     category_guess: str | None = None
+    # Duplicate detection
+    is_duplicate: bool = False
+    duplicate_expense_id: int | None = None
+    duplicate_description: str | None = None
+    duplicate_amount: float | None = None
+    duplicate_currency: str | None = None
+    duplicate_date: str | None = None
 
 
 class ReceiptResponse(BaseModel):

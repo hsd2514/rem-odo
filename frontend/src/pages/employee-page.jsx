@@ -11,7 +11,64 @@ import { Badge } from "../components/ui/badge";
 import { Tabs } from "../components/ui/tabs";
 import { Modal } from "../components/ui/modal";
 import { TimelinePanel } from "../components/ui/timeline-panel";
-import { Plus, Upload, Send, FileText, ScanLine, X, ImageIcon } from "lucide-react";
+import { Plus, Upload, Send, FileText, ScanLine, X, ImageIcon, AlertTriangle } from "lucide-react";
+
+/**
+ * Shown inside the expense form when the uploaded receipt matches an
+ * existing one in the company's history (within 90 days).
+ */
+function DuplicateWarningBanner({ warning, onDismiss }) {
+  if (!warning) return null;
+  return (
+    <div
+      role="alert"
+      style={{
+        background: "#fffbeb",
+        border: "1.5px solid #f59e0b",
+        borderRadius: "var(--radius-sm)",
+        padding: "0.85rem 1rem",
+        marginBottom: "1rem",
+        display: "flex",
+        gap: "0.75rem",
+        alignItems: "flex-start",
+      }}
+    >
+      <AlertTriangle size={16} style={{ color: "#d97706", flexShrink: 0, marginTop: "2px" }} />
+      <div style={{ flex: 1 }}>
+        <p style={{ margin: 0, fontWeight: 700, fontSize: "0.83rem", color: "#92400e" }}>
+          Potential duplicate receipt detected
+        </p>
+        <p style={{ margin: "0.2rem 0 0", fontSize: "0.78rem", color: "#78350f", lineHeight: 1.5 }}>
+          This receipt looks identical to an existing expense:
+          {" "}
+          <strong>{warning.duplicate_description}</strong>
+          {" — "}
+          {warning.duplicate_amount} {warning.duplicate_currency}
+          {warning.duplicate_date ? ` on ${warning.duplicate_date}` : ""}.
+        </p>
+        <p style={{ margin: "0.35rem 0 0", fontSize: "0.74rem", color: "#92400e" }}>
+          You can still save this expense if it is intentional.
+        </p>
+      </div>
+      <button
+        onClick={onDismiss}
+        title="Dismiss warning"
+        style={{
+          background: "none",
+          border: "none",
+          cursor: "pointer",
+          color: "#d97706",
+          padding: "0.1rem",
+          flexShrink: 0,
+          display: "flex",
+          alignItems: "center",
+        }}
+      >
+        <X size={13} />
+      </button>
+    </div>
+  );
+}
 
 const CATEGORIES = ["Food", "Travel", "Lodging", "Miscellaneous", "Office", "Medical", "Entertainment"];
 const CURRENCIES = ["USD", "INR", "EUR", "GBP", "AED", "JPY", "CAD", "AUD", "SGD", "CHF"];
@@ -112,15 +169,18 @@ function ReceiptUploadZone({ onFile, uploading, preview, onClear }) {
 
   return (
     <div
-      className="upload-zone"
+      className=""
       style={{
         padding: "1.5rem 1rem",
         cursor: uploading ? "wait" : "pointer",
-        borderColor: dragging ? "var(--accent)" : undefined,
-        background: dragging ? "var(--accent-soft)" : undefined,
-        color: dragging ? "var(--accent)" : undefined,
+        borderWidth: "2px",
+        borderStyle: "dashed",
+        borderColor: dragging ? "var(--accent)" : "var(--border-strong)",
+        background: dragging ? "var(--accent-soft)" : "var(--surface-raised)",
+        color: dragging ? "var(--accent)" : "var(--text-muted)",
         transition: "all 0.2s",
         borderRadius: "var(--radius-sm)",
+        textAlign: "center",
       }}
       onDrop={handleDrop}
       onDragOver={handleDragOver}
@@ -238,6 +298,7 @@ export function EmployeePage() {
   // Receipt state for the new expense form
   const [pendingReceiptId, setPendingReceiptId] = useState(null);
   const [receiptPreview, setReceiptPreview] = useState(null); // local object URL
+  const [duplicateWarning, setDuplicateWarning] = useState(null); // duplicate detection result
 
   const [form, setForm] = useState({
     amount: "",
@@ -284,9 +345,17 @@ export function EmployeePage() {
   const uploadMutation = useMutation({
     mutationFn: (file) => api.uploadReceipt(file),
     onSuccess: (data, file) => {
-      toast.success("Receipt scanned — fields autofilled");
       // Store receipt_id to attach on save
       if (data.receipt_id) setPendingReceiptId(data.receipt_id);
+
+      // Duplicate detection warning
+      if (data.is_duplicate) {
+        setDuplicateWarning(data);
+        toast.error("⚠️ Duplicate receipt detected — please review before saving");
+      } else {
+        setDuplicateWarning(null);
+        toast.success("Receipt scanned — fields autofilled");
+      }
 
       // Parse OCR date
       const parsedDate = parseOCRDate(data.expense_date);
@@ -319,6 +388,7 @@ export function EmployeePage() {
     setPendingReceiptId(null);
     if (receiptPreview) URL.revokeObjectURL(receiptPreview);
     setReceiptPreview(null);
+    setDuplicateWarning(null);
   };
 
   const handleReceiptFile = (file) => {
@@ -329,6 +399,7 @@ export function EmployeePage() {
     setPendingReceiptId(null);
     if (receiptPreview) URL.revokeObjectURL(receiptPreview);
     setReceiptPreview(null);
+    setDuplicateWarning(null);
   };
 
   const expenses = expensesQuery.data || [];
@@ -521,17 +592,24 @@ export function EmployeePage() {
             </div>
           </div>
 
+          <DuplicateWarningBanner
+            warning={duplicateWarning}
+            onDismiss={() => setDuplicateWarning(null)}
+          />
+
           <div style={{ marginTop: "1rem", display: "flex", gap: "0.5rem", alignItems: "center" }}>
             <Button
               variant="primary"
-              onClick={() =>
+              disabled={createMutation.isPending}
+              onClick={() => {
+                if (!form.description) { toast.error("Please enter a description"); return; }
+                if (!form.amount || Number(form.amount) <= 0) { toast.error("Please enter a valid amount"); return; }
                 createMutation.mutate({
                   ...form,
                   amount: Number(form.amount),
                   expense_date: new Date(form.expense_date).toISOString(),
-                })
-              }
-              disabled={createMutation.isPending || !form.amount || !form.description}
+                });
+              }}
             >
               {createMutation.isPending ? "Saving…" : "Save as Draft"}
             </Button>

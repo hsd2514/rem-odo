@@ -11,14 +11,19 @@ from app.schemas import OCRResult
 
 def run_ocr(file_path: str) -> OCRResult:
     try:
-        text = pytesseract.image_to_string(Image.open(file_path))
-    except Exception:
+        img = Image.open(file_path).convert("RGB")
+        text = pytesseract.image_to_string(img)
+        print(f"\n[OCR] Raw text extracted ({len(text)} chars):\n{text[:500]}\n")
+    except Exception as e:
+        print(f"[OCR] ERROR running tesseract: {e}")
         return OCRResult()
 
     amount = _extract_amount(text)
     date_str = _extract_date(text)
     vendor = _extract_vendor(text)
     category_guess = _guess_category(text)
+
+    print(f"[OCR] Parsed → amount={amount}, date={date_str}, vendor={vendor}, category={category_guess}")
 
     return OCRResult(
         amount=amount,
