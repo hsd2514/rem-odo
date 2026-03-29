@@ -1093,6 +1093,49 @@ tbody tr:last-child td {
   animation-delay: 0.25s;
 }
 
+.top-spenders-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.spender-pill {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 0.7rem;
+  align-items: center;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-base);
+}
+
+.spender-rank {
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: var(--accent);
+  min-width: 1.7rem;
+}
+
+.spender-name {
+  margin: 0;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.spender-meta {
+  margin: 0.1rem 0 0;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+.spender-amount {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
 .team-card table tbody tr {
   cursor: pointer;
 }

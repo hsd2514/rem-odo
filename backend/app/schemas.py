@@ -267,3 +267,10 @@ class TeamBreakdownItem(BaseModel):
     pending_count: int = 0
     approved_count: int = 0
     rejected_count: int = 0
+
+
+class TopSpenderItem(BaseModel):
+    user_id: int
+    user_name: str
+    total_spend: float = 0.0
+    expense_count: int = 0

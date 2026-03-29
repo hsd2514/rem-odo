@@ -96,6 +96,8 @@ export const api = {
   analyticsMonthly: (filters = {}) => request(`/analytics/monthly-spend${buildQuery(filters)}`),
   analyticsCategory: (filters = {}) => request(`/analytics/category-breakdown${buildQuery(filters)}`),
   analyticsTeam: (filters = {}) => request(`/analytics/team-breakdown${buildQuery(filters)}`),
+  analyticsTopSpenders: (filters = {}) =>
+    request(`/analytics/top-spenders${buildQuery(filters)}`),
 };
 
 function buildQuery(filters) {
