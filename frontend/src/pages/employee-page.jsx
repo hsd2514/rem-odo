@@ -10,7 +10,7 @@ import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
 import { Tabs } from "../components/ui/tabs";
 import { Modal } from "../components/ui/modal";
-import { AlertTriangle, Plus, Upload, Send, FileText } from "lucide-react";
+import { AlertTriangle, Eye, Plus, Upload, Send, FileText, X } from "lucide-react";
 
 const POLICY_CONFIG = {
   defaultSoftLimit: 15000,
@@ -119,6 +119,58 @@ function ExpenseLifecycleTracker({ status, compact = false }) {
   );
 }
 
+function ReceiptPreviewDrawer({
+  open,
+  previewUrl,
+  previewName,
+  previewMime,
+  onToggle,
+  onClose,
+}) {
+  const isPdf = previewMime === "application/pdf";
+
+  return (
+    <div className="card" style={{ padding: "0.9rem", minHeight: "240px", position: "relative" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.55rem" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>
+          <Eye size={14} />
+          <span style={{ fontSize: "0.78rem", fontWeight: 700 }}>Receipt Preview</span>
+        </div>
+        <div style={{ display: "flex", gap: "0.25rem", alignItems: "center" }}>
+          <Button size="xs" variant="ghost" onClick={onToggle}>
+            {open ? "Hide" : "Show"}
+          </Button>
+          {previewUrl && (
+            <Button size="xs" variant="ghost" onClick={onClose}>
+              <X size={11} />
+            </Button>
+          )}
+        </div>
+      </div>
+      <p style={{ margin: "0 0 0.55rem", fontSize: "0.7rem", color: "var(--text-muted)" }}>
+        {previewName || "No receipt selected"} · <span style={{ fontWeight: 700 }}>Alt+P</span>
+      </p>
+      {!previewUrl || !open ? (
+        <div style={{ border: "1px dashed var(--border)", borderRadius: "var(--radius-sm)", minHeight: "170px", display: "grid", placeItems: "center", color: "var(--text-muted)", fontSize: "0.76rem" }}>
+          Upload a receipt to preview it here
+        </div>
+      ) : isPdf ? (
+        <iframe
+          title="Receipt PDF Preview"
+          src={previewUrl}
+          style={{ width: "100%", height: "320px", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", background: "white" }}
+        />
+      ) : (
+        <img
+          src={previewUrl}
+          alt="Receipt preview"
+          style={{ width: "100%", height: "320px", objectFit: "contain", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", background: "var(--surface-raised)" }}
+        />
+      )}
+    </div>
+  );
+}
+
 export function EmployeePage() {
   const qc = useQueryClient();
   const toast = useToast();
@@ -128,6 +180,10 @@ export function EmployeePage() {
   const [selectedExpense, setSelectedExpense] = useState(null);
   const [submitWarnings, setSubmitWarnings] = useState(null); // { expenseId, description, warnings[] }
   const [duplicateWarning, setDuplicateWarning] = useState(null);
+  const [receiptPreviewUrl, setReceiptPreviewUrl] = useState("");
+  const [receiptPreviewName, setReceiptPreviewName] = useState("");
+  const [receiptPreviewMime, setReceiptPreviewMime] = useState("");
+  const [previewDrawerOpen, setPreviewDrawerOpen] = useState(true);
   const [conversionPreview, setConversionPreview] = useState(null);
   const [conversionLoading, setConversionLoading] = useState(false);
   const [conversionError, setConversionError] = useState("");
@@ -193,7 +249,25 @@ export function EmployeePage() {
       paid_by: "Self", currency: "USD", remarks: "",
     });
     setDuplicateWarning(null);
+    if (receiptPreviewUrl) {
+      URL.revokeObjectURL(receiptPreviewUrl);
+    }
+    setReceiptPreviewUrl("");
+    setReceiptPreviewName("");
+    setReceiptPreviewMime("");
   };
+
+  useEffect(() => {
+    const onKeyDown = (event) => {
+      if (!showForm) return;
+      if (event.altKey && event.key.toLowerCase() === "p") {
+        event.preventDefault();
+        setPreviewDrawerOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [showForm]);
 
   useEffect(() => {
     const baseCurrency = meQuery.data?.default_currency;
@@ -263,7 +337,16 @@ export function EmployeePage() {
   const handleUpload = () => fileRef.current?.click();
   const handleFileChange = (e) => {
     const file = e.target.files?.[0];
-    if (file) uploadMutation.mutate(file);
+    if (file) {
+      if (receiptPreviewUrl) {
+        URL.revokeObjectURL(receiptPreviewUrl);
+      }
+      setReceiptPreviewUrl(URL.createObjectURL(file));
+      setReceiptPreviewName(file.name || "receipt");
+      setReceiptPreviewMime(file.type || "");
+      setPreviewDrawerOpen(true);
+      uploadMutation.mutate(file);
+    }
     e.target.value = "";
   };
 
@@ -373,69 +456,88 @@ export function EmployeePage() {
               </div>
             </div>
           )}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
-            <Input label="Description" placeholder="Restaurant bill, taxi fare..." value={form.description} onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))} />
-            <Input label="Expense Date" type="datetime-local" value={form.expense_date} onChange={(e) => setForm((p) => ({ ...p, expense_date: e.target.value }))} />
-            <Select label="Category" value={form.category} onChange={(e) => setForm((p) => ({ ...p, category: e.target.value }))}>
-              <option>Food</option><option>Travel</option><option>Lodging</option><option>Miscellaneous</option>
-            </Select>
-            <Input label="Paid By" placeholder="Self, Company Card..." value={form.paid_by} onChange={(e) => setForm((p) => ({ ...p, paid_by: e.target.value }))} />
-            <Select label="Currency" value={form.currency} onChange={(e) => setForm((p) => ({ ...p, currency: e.target.value }))}>
-              <option>USD</option><option>INR</option><option>EUR</option><option>GBP</option><option>AED</option><option>JPY</option><option>CAD</option><option>AUD</option>
-            </Select>
-            <Input label="Amount" type="number" placeholder="567.00" value={form.amount} onChange={(e) => setForm((p) => ({ ...p, amount: e.target.value }))} />
-            <div style={{ gridColumn: "1 / -1" }}>
-              <div className="policy-warning-banner" style={{ marginTop: "0.2rem" }}>
-                <p style={{ margin: 0, fontWeight: 700, fontSize: "0.8rem", color: "var(--text-primary)" }}>
-                  Live Conversion Preview
-                </p>
-                {conversionLoading ? (
-                  <p style={{ margin: "0.3rem 0 0", fontSize: "0.78rem", color: "var(--text-muted)" }}>
-                    Fetching latest exchange rate...
-                  </p>
-                ) : conversionError ? (
-                  <p style={{ margin: "0.3rem 0 0", fontSize: "0.78rem", color: "var(--danger)" }}>
-                    {conversionError}
-                  </p>
-                ) : conversionPreview ? (
-                  <div style={{ marginTop: "0.3rem" }}>
-                    <p style={{ margin: 0, fontSize: "0.82rem", color: "var(--text-secondary)" }}>
-                      {conversionPreview.amount} {conversionPreview.from_currency} ≈{" "}
-                      <strong style={{ color: "var(--text-primary)" }}>
-                        {conversionPreview.converted_amount} {conversionPreview.to_currency}
-                      </strong>
+          <div className="expense-form-drawer-grid" style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: "1rem" }}>
+            <div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
+                <Input label="Description" placeholder="Restaurant bill, taxi fare..." value={form.description} onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))} />
+                <Input label="Expense Date" type="datetime-local" value={form.expense_date} onChange={(e) => setForm((p) => ({ ...p, expense_date: e.target.value }))} />
+                <Select label="Category" value={form.category} onChange={(e) => setForm((p) => ({ ...p, category: e.target.value }))}>
+                  <option>Food</option><option>Travel</option><option>Lodging</option><option>Miscellaneous</option>
+                </Select>
+                <Input label="Paid By" placeholder="Self, Company Card..." value={form.paid_by} onChange={(e) => setForm((p) => ({ ...p, paid_by: e.target.value }))} />
+                <Select label="Currency" value={form.currency} onChange={(e) => setForm((p) => ({ ...p, currency: e.target.value }))}>
+                  <option>USD</option><option>INR</option><option>EUR</option><option>GBP</option><option>AED</option><option>JPY</option><option>CAD</option><option>AUD</option>
+                </Select>
+                <Input label="Amount" type="number" placeholder="567.00" value={form.amount} onChange={(e) => setForm((p) => ({ ...p, amount: e.target.value }))} />
+                <div style={{ gridColumn: "1 / -1" }}>
+                  <div className="policy-warning-banner" style={{ marginTop: "0.2rem" }}>
+                    <p style={{ margin: 0, fontWeight: 700, fontSize: "0.8rem", color: "var(--text-primary)" }}>
+                      Live Conversion Preview
                     </p>
-                    <p style={{ margin: "0.2rem 0 0", fontSize: "0.75rem", color: "var(--text-muted)" }}>
-                      Rate: 1 {conversionPreview.from_currency} = {conversionPreview.rate} {conversionPreview.to_currency}
-                      {" · "}
-                      {new Date(conversionPreview.as_of).toLocaleString()}
-                    </p>
-                    {conversionPreview.fallback && (
-                      <p style={{ margin: "0.2rem 0 0", fontSize: "0.75rem", color: "var(--warning)" }}>
-                        {conversionPreview.message || "Using resilient fallback conversion."}
+                    {conversionLoading ? (
+                      <p style={{ margin: "0.3rem 0 0", fontSize: "0.78rem", color: "var(--text-muted)" }}>
+                        Fetching latest exchange rate...
+                      </p>
+                    ) : conversionError ? (
+                      <p style={{ margin: "0.3rem 0 0", fontSize: "0.78rem", color: "var(--danger)" }}>
+                        {conversionError}
+                      </p>
+                    ) : conversionPreview ? (
+                      <div style={{ marginTop: "0.3rem" }}>
+                        <p style={{ margin: 0, fontSize: "0.82rem", color: "var(--text-secondary)" }}>
+                          {conversionPreview.amount} {conversionPreview.from_currency} ≈{" "}
+                          <strong style={{ color: "var(--text-primary)" }}>
+                            {conversionPreview.converted_amount} {conversionPreview.to_currency}
+                          </strong>
+                        </p>
+                        <p style={{ margin: "0.2rem 0 0", fontSize: "0.75rem", color: "var(--text-muted)" }}>
+                          Rate: 1 {conversionPreview.from_currency} = {conversionPreview.rate} {conversionPreview.to_currency}
+                          {" · "}
+                          {new Date(conversionPreview.as_of).toLocaleString()}
+                        </p>
+                        {conversionPreview.fallback && (
+                          <p style={{ margin: "0.2rem 0 0", fontSize: "0.75rem", color: "var(--warning)" }}>
+                            {conversionPreview.message || "Using resilient fallback conversion."}
+                          </p>
+                        )}
+                      </div>
+                    ) : (
+                      <p style={{ margin: "0.3rem 0 0", fontSize: "0.78rem", color: "var(--text-muted)" }}>
+                        Enter an amount to preview conversion to company base currency.
                       </p>
                     )}
                   </div>
-                ) : (
-                  <p style={{ margin: "0.3rem 0 0", fontSize: "0.78rem", color: "var(--text-muted)" }}>
-                    Enter an amount to preview conversion to company base currency.
-                  </p>
-                )}
+                </div>
+                <div style={{ gridColumn: "1 / -1" }}>
+                  <Textarea label="Remarks" placeholder="Additional notes..." value={form.remarks} onChange={(e) => setForm((p) => ({ ...p, remarks: e.target.value }))} />
+                </div>
+              </div>
+              <div style={{ marginTop: "1rem", display: "flex", gap: "0.5rem" }}>
+                <Button variant="primary" onClick={() => createMutation.mutate({
+                  ...form,
+                  amount: Number(form.amount),
+                  expense_date: new Date(form.expense_date).toISOString(),
+                })}>
+                  {createMutation.isPending ? "Creating..." : "Save as Draft"}
+                </Button>
+                <Button onClick={() => setShowForm(false)}>Cancel</Button>
               </div>
             </div>
-            <div style={{ gridColumn: "1 / -1" }}>
-              <Textarea label="Remarks" placeholder="Additional notes..." value={form.remarks} onChange={(e) => setForm((p) => ({ ...p, remarks: e.target.value }))} />
-            </div>
-          </div>
-          <div style={{ marginTop: "1rem", display: "flex", gap: "0.5rem" }}>
-            <Button variant="primary" onClick={() => createMutation.mutate({
-              ...form,
-              amount: Number(form.amount),
-              expense_date: new Date(form.expense_date).toISOString(),
-            })}>
-              {createMutation.isPending ? "Creating..." : "Save as Draft"}
-            </Button>
-            <Button onClick={() => setShowForm(false)}>Cancel</Button>
+            <ReceiptPreviewDrawer
+              open={previewDrawerOpen}
+              previewUrl={receiptPreviewUrl}
+              previewName={receiptPreviewName}
+              previewMime={receiptPreviewMime}
+              onToggle={() => setPreviewDrawerOpen((prev) => !prev)}
+              onClose={() => {
+                if (receiptPreviewUrl) {
+                  URL.revokeObjectURL(receiptPreviewUrl);
+                }
+                setReceiptPreviewUrl("");
+                setReceiptPreviewName("");
+                setReceiptPreviewMime("");
+              }}
+            />
           </div>
         </div>
       )}
