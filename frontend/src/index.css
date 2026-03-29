@@ -714,3 +714,8 @@ tbody tr:last-child td {
     font-size: 0.62rem;
   }
 }
+@media (max-width: 1024px) {
+  .rules-layout-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
