@@ -1136,6 +1136,39 @@ tbody tr:last-child td {
   color: var(--text-primary);
 }
 
+.audit-filter-grid {
+  grid-template-columns: 2fr 1fr 1fr 1fr;
+}
+
+.audit-timeline {
+  display: flex;
+  flex-direction: column;
+}
+
+.audit-row {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.7rem;
+  padding: 0.8rem 0.95rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.audit-row:last-child {
+  border-bottom: none;
+}
+
+.audit-icon-wrap {
+  width: 1.8rem;
+  height: 1.8rem;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 0.1rem;
+}
+
 .team-card table tbody tr {
   cursor: pointer;
 }
@@ -1183,10 +1216,12 @@ tbody tr:last-child td {
 @media (max-width: 1024px) {
   .kpi-grid { grid-template-columns: repeat(3, 1fr); }
   .dash-charts-row { grid-template-columns: 1fr; }
+  .audit-filter-grid { grid-template-columns: 1fr 1fr; }
 }
 
 @media (max-width: 640px) {
   .kpi-grid { grid-template-columns: repeat(2, 1fr); }
   .dash-filter-bar { flex-direction: column; align-items: stretch; }
+  .audit-filter-grid { grid-template-columns: 1fr; }
 }
 
