@@ -1,13 +1,11 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "../context/toast-context";
-import { useAuth } from "../context/auth-context";
 import { AppShell } from "../components/layout/app-shell";
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
 import { Modal } from "../components/ui/modal";
 import { Textarea } from "../components/ui/textarea";
-import { TimelinePanel } from "../components/ui/timeline-panel";
 import { Input } from "../components/ui/input";
 import { Select } from "../components/ui/select";
 import { api } from "../lib/api";
@@ -40,7 +38,6 @@ function loadPresets() {
 export function ManagerPage() {
   const qc = useQueryClient();
   const toast = useToast();
-  const { role } = useAuth();
   const [commentModal, setCommentModal] = useState(null); // { id, action }
   const [comment, setComment] = useState("");
   const [selectedExpense, setSelectedExpense] = useState(null);
@@ -56,54 +53,28 @@ export function ManagerPage() {
     mutationFn: ({ id, comment }) => api.approve(id, comment),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["team-expenses"] });
-      toast.success("Expense approved");
+      toast.success("Approval successful: expense marked as approved.", { key: "approve-success" });
       setCommentModal(null);
       setComment("");
     },
-    onError: (err) => toast.error(err.message),
+    onError: (err) => toast.error(`Approval failed: ${err.message}`, { key: "approve-error" }),
   });
 
   const rejectMutation = useMutation({
     mutationFn: ({ id, comment }) => api.reject(id, comment),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["team-expenses"] });
-      toast.success("Expense rejected");
+      toast.success("Rejection successful: expense marked as rejected.", { key: "reject-success" });
       setCommentModal(null);
       setComment("");
     },
-    onError: (err) => toast.error(err.message),
-  });
-
-  const overrideApproveMutation = useMutation({
-    mutationFn: ({ id, comment }) => api.overrideApprove(id, comment),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["team-expenses"] });
-      toast.success("Admin override approval saved");
-      setCommentModal(null);
-      setComment("");
-    },
-    onError: (err) => toast.error(err.message),
-  });
-
-  const overrideRejectMutation = useMutation({
-    mutationFn: ({ id, comment }) => api.overrideReject(id, comment),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["team-expenses"] });
-      toast.success("Admin override rejection saved");
-      setCommentModal(null);
-      setComment("");
-    },
-    onError: (err) => toast.error(err.message),
+    onError: (err) => toast.error(`Rejection failed: ${err.message}`, { key: "reject-error" }),
   });
 
   const handleAction = () => {
     if (!commentModal) return;
     if (commentModal.action === "approve") {
       approveMutation.mutate({ id: commentModal.id, comment });
-    } else if (commentModal.action === "override-approve") {
-      overrideApproveMutation.mutate({ id: commentModal.id, comment });
-    } else if (commentModal.action === "override-reject") {
-      overrideRejectMutation.mutate({ id: commentModal.id, comment });
     } else {
       rejectMutation.mutate({ id: commentModal.id, comment });
     }
@@ -111,11 +82,8 @@ export function ManagerPage() {
 
   const loadDetail = async (expense) => {
     try {
-      const [detail, timeline] = await Promise.all([
-        api.getExpenseDetail(expense.id),
-        api.getExpenseTimeline(expense.id),
-      ]);
-      setSelectedExpense({ ...detail, timeline });
+      const detail = await api.getExpenseDetail(expense.id);
+      setSelectedExpense(detail);
     } catch {
       setSelectedExpense({ expense, approval_logs: [] });
     }
@@ -465,16 +433,6 @@ export function ManagerPage() {
                       ) : (
                         <span style={{ color: "var(--text-muted)", fontSize: "0.75rem" }}>No actions</span>
                       )}
-                      {role === "admin" && (
-                        <>
-                          <Button size="xs" onClick={() => setCommentModal({ id: item.id, action: "override-approve" })}>
-                            Override +Approve
-                          </Button>
-                          <Button size="xs" onClick={() => setCommentModal({ id: item.id, action: "override-reject" })}>
-                            Override +Reject
-                          </Button>
-                        </>
-                      )}
                     </div>
                   </td>
                 </tr>
@@ -488,15 +446,7 @@ export function ManagerPage() {
       <Modal
         open={!!commentModal}
         onClose={() => { setCommentModal(null); setComment(""); }}
-        title={
-          commentModal?.action === "approve"
-            ? "Approve Expense"
-            : commentModal?.action === "reject"
-              ? "Reject Expense"
-              : commentModal?.action === "override-approve"
-                ? "Admin Override Approve"
-                : "Admin Override Reject"
-        }
+        title={commentModal?.action === "approve" ? "Approve Expense" : "Reject Expense"}
       >
         <Textarea
           label="Comment (optional)"
@@ -506,10 +456,10 @@ export function ManagerPage() {
         />
         <div style={{ marginTop: "1rem", display: "flex", gap: "0.5rem" }}>
           <Button
-            variant={commentModal?.action === "approve" || commentModal?.action === "override-approve" ? "success" : "danger"}
+            variant={commentModal?.action === "approve" ? "success" : "danger"}
             onClick={handleAction}
           >
-            {commentModal?.action === "approve" || commentModal?.action === "override-approve" ? (
+            {commentModal?.action === "approve" ? (
               <><CheckCircle size={14} /> Confirm Approval</>
             ) : (
               <><XCircle size={14} /> Confirm Rejection</>
@@ -568,7 +518,6 @@ export function ManagerPage() {
                 </tbody>
               </table>
             )}
-            <TimelinePanel timeline={selectedExpense.timeline} />
           </div>
         )}
       </Modal>

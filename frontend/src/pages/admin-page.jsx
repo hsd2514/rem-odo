@@ -35,9 +35,9 @@ export function AdminPage() {
     mutationFn: (userId) => api.sendPassword(userId),
     onSuccess: (data) => {
       setPwModal(data);
-      toast.success("Password generated");
+      toast.success("Temporary password generated and ready to share.", { key: "password-sent-success" });
     },
-    onError: (err) => toast.error(err.message),
+    onError: (err) => toast.error(`Password generation failed: ${err.message}`, { key: "password-sent-error" }),
   });
 
   const seedDemoMutation = useMutation({
