@@ -576,6 +576,14 @@ tbody tr:last-child td {
   color: var(--accent);
 }
 
+.policy-warning-banner {
+  background: #fff9ed;
+  border: 1px solid #fcd9a4;
+  border-left: 4px solid var(--warning);
+  border-radius: var(--radius-sm);
+  padding: 0.8rem 0.9rem;
+}
+
 .status-progress {
   display: flex;
   flex-direction: column;
