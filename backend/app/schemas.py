@@ -188,10 +188,20 @@ class ApprovalDecisionRequest(BaseModel):
 
 
 class OCRResult(BaseModel):
+    receipt_id: int | None = None
     amount: float | None = None
     vendor: str | None = None
     expense_date: str | None = None
     category_guess: str | None = None
+
+
+class ReceiptResponse(BaseModel):
+    id: int
+    expense_id: int | None = None
+    file_name: str
+    file_path: str
+    mime_type: str
+    ocr_payload: dict = Field(default_factory=dict)
 
 
 # ── Analytics ─────────────────────────────────────

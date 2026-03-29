@@ -22,6 +22,7 @@ from app.schemas import (
     ExpenseDetailResponse,
     ExpenseResponse,
     OCRResult,
+    ReceiptResponse,
     TimelineEventResponse,
 )
 from app.services.currency import convert_currency
@@ -190,7 +191,44 @@ async def upload_receipt(
     session.add(receipt)
     session.commit()
 
-    return ocr_result
+    return OCRResult(
+        receipt_id=receipt.id,
+        amount=ocr_result.amount,
+        vendor=ocr_result.vendor,
+        expense_date=ocr_result.expense_date,
+        category_guess=ocr_result.category_guess,
+    )
+
+
+@router.post("/{expense_id}/attach-receipt", response_model=ReceiptResponse)
+def attach_receipt(
+    expense_id: int,
+    receipt_id: int,
+    session: Session = Depends(get_session),
+    _: User = Depends(require_role("employee")),
+    current_user: User = Depends(get_current_user),
+) -> ReceiptResponse:
+    expense = session.get(Expense, expense_id)
+    if not expense or expense.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Expense not found")
+
+    receipt = session.get(Receipt, receipt_id)
+    if not receipt:
+        raise HTTPException(status_code=404, detail="Receipt not found")
+
+    receipt.expense_id = expense_id
+    session.add(receipt)
+    session.commit()
+    session.refresh(receipt)
+
+    return ReceiptResponse(
+        id=receipt.id,
+        expense_id=receipt.expense_id,
+        file_name=receipt.file_name,
+        file_path=f"/uploads/{receipt.file_path.split('uploads/')[-1].replace(chr(92), '/')}",
+        mime_type=receipt.mime_type,
+        ocr_payload=receipt.ocr_payload or {},
+    )
 
 
 @router.get("/my", response_model=list[ExpenseResponse])
@@ -260,10 +298,16 @@ def get_expense_detail(
 
     receipt = session.exec(select(Receipt).where(Receipt.expense_id == expense_id)).first()
 
+    # Build a proper URL for the receipt
+    receipt_url = None
+    if receipt:
+        fname = receipt.file_path.replace("\\", "/").split("uploads/")[-1]
+        receipt_url = f"/uploads/{fname}"
+
     return ExpenseDetailResponse(
         expense=expense_resp,
         approval_logs=log_responses,
-        receipt_url=receipt.file_path if receipt else None,
+        receipt_url=receipt_url,
     )
 
 

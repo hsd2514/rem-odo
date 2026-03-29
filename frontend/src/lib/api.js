@@ -72,6 +72,8 @@ export const api = {
     formData.append("file", file);
     return request("/expenses/upload-receipt", { method: "POST", body: formData });
   },
+  attachReceipt: (expenseId, receiptId) =>
+    request(`/expenses/${expenseId}/attach-receipt?receipt_id=${receiptId}`, { method: "POST" }),
 
   // Approvals
   approve: (expenseId, comment = "") =>
