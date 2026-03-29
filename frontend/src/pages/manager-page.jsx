@@ -1,11 +1,12 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "../context/toast-context";
+import { useAuth } from "../context/auth-context";
 import { AppShell } from "../components/layout/app-shell";
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
+import { Checkbox } from "../components/ui/checkbox";
 import { Modal } from "../components/ui/modal";
-import { Textarea } from "../components/ui/textarea";
 import { Input } from "../components/ui/input";
 import { Select } from "../components/ui/select";
 import { api } from "../lib/api";
@@ -38,8 +39,11 @@ function loadPresets() {
 export function ManagerPage() {
   const qc = useQueryClient();
   const toast = useToast();
-  const [commentModal, setCommentModal] = useState(null); // { id, action }
-  const [comment, setComment] = useState("");
+  const { userId } = useAuth();
+  const currentUserId = Number(userId);
+  const [selectedRows, setSelectedRows] = useState(() => new Set());
+  const [inlineComments, setInlineComments] = useState({});
+  const [bulkActionInFlight, setBulkActionInFlight] = useState(null);
   const [selectedExpense, setSelectedExpense] = useState(null);
   const [filters, setFilters] = useState(defaultFilters);
   const [sortConfig, setSortConfig] = useState({ key: "expense_date", direction: "desc" });
@@ -49,36 +53,33 @@ export function ManagerPage() {
 
   const teamQuery = useQuery({ queryKey: ["team-expenses"], queryFn: api.teamExpenses });
 
-  const approveMutation = useMutation({
-    mutationFn: ({ id, comment }) => api.approve(id, comment),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["team-expenses"] });
-      toast.success("Approval successful: expense marked as approved.", { key: "approve-success" });
-      setCommentModal(null);
-      setComment("");
+  const decisionMutation = useMutation({
+    mutationFn: ({ id, action, comment }) => {
+      if (action === "approve") {
+        return api.approve(id, comment);
+      }
+      return api.reject(id, comment);
     },
-    onError: (err) => toast.error(`Approval failed: ${err.message}`, { key: "approve-error" }),
-  });
+    onMutate: async ({ id, action }) => {
+      await qc.cancelQueries({ queryKey: ["team-expenses"] });
+      const previousExpenses = qc.getQueryData(["team-expenses"]);
 
-  const rejectMutation = useMutation({
-    mutationFn: ({ id, comment }) => api.reject(id, comment),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["team-expenses"] });
-      toast.success("Rejection successful: expense marked as rejected.", { key: "reject-success" });
-      setCommentModal(null);
-      setComment("");
+      qc.setQueryData(["team-expenses"], (old = []) =>
+        old.map((expense) =>
+          expense.id === id
+            ? { ...expense, status: action === "approve" ? "approved" : "rejected" }
+            : expense,
+        ),
+      );
+
+      return { previousExpenses };
     },
-    onError: (err) => toast.error(`Rejection failed: ${err.message}`, { key: "reject-error" }),
+    onError: (_error, _variables, context) => {
+      if (context?.previousExpenses) {
+        qc.setQueryData(["team-expenses"], context.previousExpenses);
+      }
+    },
   });
-
-  const handleAction = () => {
-    if (!commentModal) return;
-    if (commentModal.action === "approve") {
-      approveMutation.mutate({ id: commentModal.id, comment });
-    } else {
-      rejectMutation.mutate({ id: commentModal.id, comment });
-    }
-  };
 
   const loadDetail = async (expense) => {
     try {
@@ -216,6 +217,197 @@ export function ManagerPage() {
 
     return sorted;
   }, [expenses, filters, sortConfig]);
+
+  const pendingVisibleIds = useMemo(
+    () => filteredSorted.filter((item) => item.status === "pending").map((item) => item.id),
+    [filteredSorted],
+  );
+
+  const selectedPendingIds = useMemo(
+    () => pendingVisibleIds.filter((id) => selectedRows.has(id)),
+    [pendingVisibleIds, selectedRows],
+  );
+
+  const areAllPendingVisibleSelected =
+    pendingVisibleIds.length > 0 && selectedPendingIds.length === pendingVisibleIds.length;
+
+  const hasAnySelection = selectedPendingIds.length > 0;
+
+  const setRowSelected = (id, checked) => {
+    setSelectedRows((prev) => {
+      const next = new Set(prev);
+      if (checked) {
+        next.add(id);
+      } else {
+        next.delete(id);
+      }
+      return next;
+    });
+  };
+
+  const toggleSelectAllPendingVisible = (checked) => {
+    setSelectedRows((prev) => {
+      const next = new Set(prev);
+      pendingVisibleIds.forEach((id) => {
+        if (checked) {
+          next.add(id);
+        } else {
+          next.delete(id);
+        }
+      });
+      return next;
+    });
+  };
+
+  const clearCommentsForIds = (ids) => {
+    setInlineComments((prev) => {
+      const next = { ...prev };
+      ids.forEach((id) => {
+        delete next[id];
+      });
+      return next;
+    });
+  };
+
+  const clearSelectionForIds = (ids) => {
+    setSelectedRows((prev) => {
+      const next = new Set(prev);
+      ids.forEach((id) => next.delete(id));
+      return next;
+    });
+  };
+
+  const canCurrentUserActOnExpense = async (expenseId) => {
+    if (!currentUserId) {
+      return { canAct: false, reason: "Session missing user context. Please log in again." };
+    }
+
+    try {
+      const steps = await api.approvalSteps(expenseId);
+      const pendingSteps = (steps || [])
+        .filter((step) => step.status === "pending")
+        .sort((a, b) => Number(a.sequence_order) - Number(b.sequence_order));
+
+      if (pendingSteps.length === 0) {
+        return { canAct: false, reason: "This expense has no pending approval step." };
+      }
+
+      const currentPendingStep = pendingSteps[0];
+      if (Number(currentPendingStep.approver_id) !== currentUserId) {
+        return { canAct: false, reason: "Waiting for another approver before your step." };
+      }
+
+      const hasPendingStepForCurrentUser = pendingSteps.some(
+        (step) => Number(step.approver_id) === currentUserId,
+      );
+
+      if (!hasPendingStepForCurrentUser) {
+        return { canAct: false, reason: "Waiting for another approver on this expense." };
+      }
+
+      return { canAct: true, reason: "" };
+    } catch {
+      // If pre-check fails, allow attempt and rely on backend rule checks.
+      return { canAct: true, reason: "" };
+    }
+  };
+
+  const submitSingleDecision = async (id, action) => {
+    const eligibility = await canCurrentUserActOnExpense(id);
+    if (!eligibility.canAct) {
+      toast.info(eligibility.reason);
+      return;
+    }
+
+    const comment = (inlineComments[id] || "").trim();
+    try {
+      await decisionMutation.mutateAsync({ id, action, comment });
+      clearCommentsForIds([id]);
+      clearSelectionForIds([id]);
+      toast.success(
+        action === "approve"
+          ? "Approval successful: expense marked as approved."
+          : "Rejection successful: expense marked as rejected.",
+      );
+    } catch (err) {
+      toast.error(
+        action === "approve"
+          ? `Approval failed: ${err.message}`
+          : `Rejection failed: ${err.message}`,
+      );
+    } finally {
+      qc.invalidateQueries({ queryKey: ["team-expenses"] });
+    }
+  };
+
+  const submitBulkDecision = async (action) => {
+    if (!hasAnySelection) {
+      toast.info("Select at least one pending expense to continue.");
+      return;
+    }
+
+    setBulkActionInFlight(action);
+
+    const eligibilityChecks = await Promise.all(
+      selectedPendingIds.map(async (id) => ({
+        id,
+        eligibility: await canCurrentUserActOnExpense(id),
+      })),
+    );
+
+    const skippedIds = eligibilityChecks
+      .filter((item) => !item.eligibility.canAct)
+      .map((item) => item.id);
+    const idsToProcess = eligibilityChecks
+      .filter((item) => item.eligibility.canAct)
+      .map((item) => item.id);
+
+    if (idsToProcess.length === 0) {
+      setBulkActionInFlight(null);
+      toast.info("No selected expenses are actionable right now. They are waiting on another approver or already finalized.");
+      return;
+    }
+
+    const outcomes = await Promise.allSettled(
+      idsToProcess.map((id) =>
+        decisionMutation.mutateAsync({
+          id,
+          action,
+          comment: (inlineComments[id] || "").trim(),
+        }),
+      ),
+    );
+
+    const successCount = outcomes.filter((result) => result.status === "fulfilled").length;
+    const failureCount = outcomes.length - successCount;
+
+    if (successCount > 0) {
+      const successIds = idsToProcess.filter((_, index) => outcomes[index].status === "fulfilled");
+      clearCommentsForIds(successIds);
+      clearSelectionForIds(successIds);
+    }
+
+    if (failureCount === 0) {
+      toast.success(
+        action === "approve"
+          ? `Approved ${successCount} expense${successCount === 1 ? "" : "s"}${skippedIds.length ? `, skipped ${skippedIds.length}` : ""}.`
+          : `Rejected ${successCount} expense${successCount === 1 ? "" : "s"}${skippedIds.length ? `, skipped ${skippedIds.length}` : ""}.`,
+      );
+    } else if (successCount === 0) {
+      toast.error(
+        action === "approve"
+          ? "Bulk approve failed. Please retry."
+          : "Bulk reject failed. Please retry.",
+      );
+    } else {
+      toast.info(
+        `${successCount} succeeded, ${failureCount} failed${skippedIds.length ? `, ${skippedIds.length} skipped` : ""}. You can retry failed items.`,
+      );
+    }
+
+    setBulkActionInFlight(null);
+    qc.invalidateQueries({ queryKey: ["team-expenses"] });
+  };
 
   const pendingCount = filteredSorted.filter((item) => item.status === "pending").length;
   const resolvedCount = filteredSorted.filter((item) => item.status !== "pending" && item.status !== "draft").length;
@@ -383,24 +575,79 @@ export function ManagerPage() {
       </div>
 
       <div className="card" style={{ overflow: "hidden", marginBottom: "1.5rem" }}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: "0.75rem",
+            padding: "0.85rem 1rem",
+            borderBottom: "1px solid var(--border-color)",
+            background: "rgba(255, 255, 255, 0.04)",
+          }}
+        >
+          <span style={{ fontSize: "0.82rem", color: "var(--text-secondary)" }}>
+            {hasAnySelection
+              ? `${selectedPendingIds.length} pending expense${selectedPendingIds.length === 1 ? "" : "s"} selected`
+              : "Select pending rows to apply bulk decisions"}
+          </span>
+          <div style={{ display: "flex", gap: "0.5rem" }}>
+            <Button
+              size="sm"
+              variant="success"
+              disabled={!hasAnySelection || bulkActionInFlight !== null}
+              onClick={() => submitBulkDecision("approve")}
+            >
+              <CheckCircle size={13} />
+              {bulkActionInFlight === "approve" ? "Approving..." : "Bulk Approve"}
+            </Button>
+            <Button
+              size="sm"
+              variant="danger"
+              disabled={!hasAnySelection || bulkActionInFlight !== null}
+              onClick={() => submitBulkDecision("reject")}
+            >
+              <XCircle size={13} />
+              {bulkActionInFlight === "reject" ? "Rejecting..." : "Bulk Reject"}
+            </Button>
+          </div>
+        </div>
         <table>
           <thead>
             <tr>
+              <th style={{ width: "42px" }}>
+                <Checkbox
+                  aria-label="Select all pending visible expenses"
+                  checked={areAllPendingVisibleSelected}
+                  onChange={(e) => toggleSelectAllPendingVisible(e.target.checked)}
+                  disabled={pendingVisibleIds.length === 0}
+                />
+              </th>
               <th style={{ cursor: "pointer" }} onClick={() => setSort("description")}>Subject{sortIndicator("description")}</th>
               <th style={{ cursor: "pointer" }} onClick={() => setSort("user_name")}>Request Owner{sortIndicator("user_name")}</th>
               <th style={{ cursor: "pointer" }} onClick={() => setSort("category")}>Category{sortIndicator("category")}</th>
               <th style={{ cursor: "pointer" }} onClick={() => setSort("expense_date")}>Date{sortIndicator("expense_date")}</th>
               <th style={{ cursor: "pointer" }} onClick={() => setSort("status")}>Status{sortIndicator("status")}</th>
               <th style={{ cursor: "pointer" }} onClick={() => setSort("amount")}>Amount (Company Currency){sortIndicator("amount")}</th>
-              <th style={{ width: "200px" }}>Actions</th>
+              <th style={{ width: "220px" }}>Inline Comment</th>
+              <th style={{ width: "220px" }}>Actions</th>
             </tr>
           </thead>
           <tbody>
             {filteredSorted.length === 0 ? (
-              <tr><td colSpan={7} className="empty-state">No expenses match the current filters.</td></tr>
+              <tr><td colSpan={9} className="empty-state">No expenses match the current filters.</td></tr>
             ) : (
               filteredSorted.map((item) => (
                 <tr key={item.id} style={{ opacity: item.status === "pending" ? 1 : 0.75 }}>
+                  <td>
+                    {item.status === "pending" ? (
+                      <Checkbox
+                        aria-label={`Select expense ${item.id}`}
+                        checked={selectedRows.has(item.id)}
+                        onChange={(e) => setRowSelected(item.id, e.target.checked)}
+                      />
+                    ) : null}
+                  </td>
                   <td style={{ fontWeight: 600 }}>{item.description}</td>
                   <td style={{ color: "var(--text-secondary)" }}>{item.user_name || `User #${item.user_id}`}</td>
                   <td>{item.category}</td>
@@ -417,16 +664,42 @@ export function ManagerPage() {
                     </span>
                   </td>
                   <td>
+                    {item.status === "pending" ? (
+                      <Input
+                        placeholder="Optional decision comment"
+                        value={inlineComments[item.id] || ""}
+                        onChange={(e) =>
+                          setInlineComments((prev) => ({
+                            ...prev,
+                            [item.id]: e.target.value,
+                          }))
+                        }
+                      />
+                    ) : (
+                      <span style={{ color: "var(--text-muted)", fontSize: "0.75rem" }}>Closed</span>
+                    )}
+                  </td>
+                  <td>
                     <div style={{ display: "flex", gap: "0.35rem" }}>
                       <Button size="xs" onClick={() => loadDetail(item)}>
                         <Eye size={11} />
                       </Button>
                       {item.status === "pending" ? (
                         <>
-                          <Button size="xs" variant="success" onClick={() => setCommentModal({ id: item.id, action: "approve" })}>
+                          <Button
+                            size="xs"
+                            variant="success"
+                            onClick={() => submitSingleDecision(item.id, "approve")}
+                            disabled={bulkActionInFlight !== null}
+                          >
                             <CheckCircle size={11} /> Approve
                           </Button>
-                          <Button size="xs" variant="danger" onClick={() => setCommentModal({ id: item.id, action: "reject" })}>
+                          <Button
+                            size="xs"
+                            variant="danger"
+                            onClick={() => submitSingleDecision(item.id, "reject")}
+                            disabled={bulkActionInFlight !== null}
+                          >
                             <XCircle size={11} /> Reject
                           </Button>
                         </>
@@ -441,33 +714,6 @@ export function ManagerPage() {
           </tbody>
         </table>
       </div>
-
-      {/* Comment / Decision Modal */}
-      <Modal
-        open={!!commentModal}
-        onClose={() => { setCommentModal(null); setComment(""); }}
-        title={commentModal?.action === "approve" ? "Approve Expense" : "Reject Expense"}
-      >
-        <Textarea
-          label="Comment (optional)"
-          placeholder="Add a note about your decision..."
-          value={comment}
-          onChange={(e) => setComment(e.target.value)}
-        />
-        <div style={{ marginTop: "1rem", display: "flex", gap: "0.5rem" }}>
-          <Button
-            variant={commentModal?.action === "approve" ? "success" : "danger"}
-            onClick={handleAction}
-          >
-            {commentModal?.action === "approve" ? (
-              <><CheckCircle size={14} /> Confirm Approval</>
-            ) : (
-              <><XCircle size={14} /> Confirm Rejection</>
-            )}
-          </Button>
-          <Button onClick={() => { setCommentModal(null); setComment(""); }}>Cancel</Button>
-        </div>
-      </Modal>
 
       {/* Detail Modal */}
       <Modal
