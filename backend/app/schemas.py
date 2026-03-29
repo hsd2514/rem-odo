@@ -76,8 +76,14 @@ class SendPasswordResponse(BaseModel):
 
 
 class ApprovalFlowRequest(BaseModel):
+    id: int | None = None
     user_id: int
     description: str
+    category: str | None = None
+    min_amount: float | None = None
+    max_amount: float | None = None
+    priority: int = 0
+    is_active: bool = True
     manager_first: bool = True
     sequential: bool = True
     min_approval_percentage: int = Field(default=60, ge=1, le=100)
@@ -90,6 +96,11 @@ class ApprovalFlowResponse(BaseModel):
     company_id: int
     user_id: int
     description: str
+    category: str | None
+    min_amount: float | None
+    max_amount: float | None
+    priority: int
+    is_active: bool
     manager_first: bool
     sequential: bool
     min_approval_percentage: int

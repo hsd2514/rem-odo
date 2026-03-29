@@ -53,6 +53,11 @@ class ApprovalFlow(SQLModel, table=True):
     company_id: int = Field(foreign_key="company.id", index=True)
     user_id: int = Field(foreign_key="user.id", index=True)
     description: str
+    category: str | None = None
+    min_amount: float | None = None
+    max_amount: float | None = None
+    priority: int = 0
+    is_active: bool = True
     manager_first: bool = True
     sequential: bool = True
     min_approval_percentage: int = 60
@@ -73,6 +78,7 @@ class Expense(SQLModel, table=True):
     paid_by: str
     expense_date: datetime
     remarks: str = ""
+    applied_flow_id: int | None = Field(default=None, foreign_key="approvalflow.id", index=True)
     status: ExpenseStatus = ExpenseStatus.draft
     submitted_at: datetime = Field(default_factory=datetime.utcnow)
 

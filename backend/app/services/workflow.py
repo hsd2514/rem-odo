@@ -5,10 +5,66 @@ from sqlmodel import Session, select
 from app.models import ApprovalFlow, ApprovalLog, ApprovalStep, Expense, ExpenseStatus
 
 
+def _normalized_category(category: str | None) -> str:
+    return (category or "").strip().lower()
+
+
+def _specificity_score(flow: ApprovalFlow) -> int:
+    score = 0
+    if flow.category:
+        score += 1
+    if flow.min_amount is not None:
+        score += 1
+    if flow.max_amount is not None:
+        score += 1
+    return score
+
+
+def _matches_flow_conditions(flow: ApprovalFlow, expense: Expense) -> bool:
+    if flow.category and _normalized_category(flow.category) != _normalized_category(expense.category):
+        return False
+
+    # Use normalized company currency amount when available for consistent thresholds.
+    effective_amount = expense.converted_amount if expense.converted_amount > 0 else expense.amount
+    if flow.min_amount is not None and effective_amount < flow.min_amount:
+        return False
+    if flow.max_amount is not None and effective_amount > flow.max_amount:
+        return False
+    return True
+
+
+def _flow_sort_key(flow: ApprovalFlow) -> tuple[int, int, int]:
+    # Deterministic order:
+    # 1) more specific rules first, 2) higher priority first, 3) lower id first.
+    flow_id = flow.id or 0
+    return (-_specificity_score(flow), -flow.priority, flow_id)
+
+
+def select_applicable_flow(session: Session, expense: Expense) -> ApprovalFlow | None:
+    candidate_flows = session.exec(
+        select(ApprovalFlow).where(
+            ApprovalFlow.user_id == expense.user_id,
+            ApprovalFlow.company_id == expense.company_id,
+            ApprovalFlow.is_active == True,  # noqa: E712
+        )
+    ).all()
+    matching = [
+        flow
+        for flow in candidate_flows
+        if flow.is_active and _matches_flow_conditions(flow, expense)
+    ]
+    if not matching:
+        return None
+    return sorted(matching, key=_flow_sort_key)[0]
+
+
 def create_steps_for_expense(session: Session, expense: Expense, manager_id: int | None) -> None:
-    flow = session.exec(select(ApprovalFlow).where(ApprovalFlow.user_id == expense.user_id)).first()
+    flow = select_applicable_flow(session, expense)
     if not flow:
         return
+
+    expense.applied_flow_id = flow.id
+    session.add(expense)
 
     ordered: list[int] = []
     if flow.manager_first and manager_id:
@@ -34,7 +90,11 @@ def apply_decision(session: Session, expense_id: int, approver_id: int, decision
     if not expense:
         raise ValueError("Expense not found")
 
-    flow = session.exec(select(ApprovalFlow).where(ApprovalFlow.user_id == expense.user_id)).first()
+    flow = None
+    if expense.applied_flow_id:
+        flow = session.get(ApprovalFlow, expense.applied_flow_id)
+    if not flow:
+        flow = select_applicable_flow(session, expense)
     if not flow:
         raise ValueError("Approval flow not configured")
 
