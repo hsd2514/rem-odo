@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { Fragment, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api";
 import { useToast } from "../context/toast-context";
@@ -10,8 +10,63 @@ import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
 import { Tabs } from "../components/ui/tabs";
 import { Modal } from "../components/ui/modal";
-import { TimelinePanel } from "../components/ui/timeline-panel";
 import { Plus, Upload, Send, FileText } from "lucide-react";
+
+function getExpenseLifecycle(status) {
+  const normalized = String(status || "draft").toLowerCase();
+  const isRejected = normalized === "rejected";
+  const finalLabel = isRejected ? "Rejected" : "Approved";
+
+  let currentIndex = 0;
+  if (normalized === "pending") currentIndex = 1;
+  if (normalized === "approved" || normalized === "rejected") currentIndex = 2;
+
+  const labels = ["Draft", "Pending", finalLabel];
+  const steps = labels.map((label, idx) => {
+    if (idx < currentIndex) return { label, state: "complete" };
+    if (idx === currentIndex) {
+      if (normalized === "rejected" && idx === 2) return { label, state: "rejected" };
+      return { label, state: "current" };
+    }
+    return { label, state: "upcoming" };
+  });
+
+  const completionText =
+    normalized === "approved" || normalized === "rejected"
+      ? "Completed"
+      : normalized === "pending"
+        ? "In review"
+        : "Not submitted";
+
+  return {
+    steps,
+    currentIndex,
+    completionText,
+  };
+}
+
+function ExpenseLifecycleTracker({ status, compact = false }) {
+  const lifecycle = getExpenseLifecycle(status);
+
+  return (
+    <div className={`status-progress ${compact ? "compact" : ""}`}>
+      <div className="status-progress-track">
+        {lifecycle.steps.map((step, idx) => (
+          <Fragment key={`${step.label}-${idx}`}>
+            <div className={`status-progress-step ${step.state}`}>
+              <span className="status-progress-dot" />
+              <span className="status-progress-label">{step.label}</span>
+            </div>
+            {idx < lifecycle.steps.length - 1 && (
+              <span className={`status-progress-line ${idx < lifecycle.currentIndex ? "complete" : "upcoming"}`} />
+            )}
+          </Fragment>
+        ))}
+      </div>
+      <span className={`status-progress-meta ${String(status || "").toLowerCase()}`}>{lifecycle.completionText}</span>
+    </div>
+  );
+}
 
 export function EmployeePage() {
   const qc = useQueryClient();
@@ -109,11 +164,8 @@ export function EmployeePage() {
 
   const loadDetail = async (expense) => {
     try {
-      const [detail, timeline] = await Promise.all([
-        api.getExpenseDetail(expense.id),
-        api.getExpenseTimeline(expense.id),
-      ]);
-      setSelectedExpense({ ...detail, timeline });
+      const detail = await api.getExpenseDetail(expense.id);
+      setSelectedExpense(detail);
     } catch {
       setSelectedExpense({ expense, approval_logs: [] });
     }
@@ -210,47 +262,97 @@ export function EmployeePage() {
       </div>
 
       <div className="card" style={{ overflow: "hidden" }}>
-        <table>
-          <thead>
-            <tr>
-              <th>Description</th>
-              <th>Date</th>
-              <th>Category</th>
-              <th>Amount</th>
-              <th>Company Amount</th>
-              <th>Status</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.length === 0 ? (
-              <tr><td colSpan={7} className="empty-state">No expenses found{tab !== "all" ? ` with status "${tab}"` : ""}.</td></tr>
-            ) : (
-              filtered.map((item) => (
-                <tr key={item.id}>
-                  <td style={{ fontWeight: 600 }}>{item.description}</td>
-                  <td style={{ color: "var(--text-secondary)", fontSize: "0.8rem" }}>{new Date(item.expense_date).toLocaleDateString()}</td>
-                  <td>{item.category}</td>
-                  <td style={{ fontWeight: 600 }}>{item.amount} <span style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>{item.currency}</span></td>
-                  <td>{item.converted_amount} <span style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>{item.base_currency}</span></td>
-                  <td><Badge status={item.status}>{item.status}</Badge></td>
-                  <td>
-                    <div style={{ display: "flex", gap: "0.35rem" }}>
-                      <Button size="xs" onClick={() => loadDetail(item)}>
-                        <FileText size={11} /> View
-                      </Button>
-                      {item.status === "draft" && (
-                        <Button size="xs" variant="primary" onClick={() => submitMutation.mutate(item.id)}>
-                          <Send size={11} /> Submit
+        <div className="expense-table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Description</th>
+                <th>Date</th>
+                <th>Category</th>
+                <th>Amount</th>
+                <th>Company Amount</th>
+                <th>Status</th>
+                <th>Progress</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.length === 0 ? (
+                <tr><td colSpan={8} className="empty-state">No expenses found{tab !== "all" ? ` with status "${tab}"` : ""}.</td></tr>
+              ) : (
+                filtered.map((item) => (
+                  <tr key={item.id}>
+                    <td style={{ fontWeight: 600 }}>{item.description}</td>
+                    <td style={{ color: "var(--text-secondary)", fontSize: "0.8rem" }}>{new Date(item.expense_date).toLocaleDateString()}</td>
+                    <td>{item.category}</td>
+                    <td style={{ fontWeight: 600 }}>{item.amount} <span style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>{item.currency}</span></td>
+                    <td>{item.converted_amount} <span style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>{item.base_currency}</span></td>
+                    <td><Badge status={item.status}>{item.status}</Badge></td>
+                    <td>
+                      <ExpenseLifecycleTracker status={item.status} compact />
+                    </td>
+                    <td>
+                      <div style={{ display: "flex", gap: "0.35rem" }}>
+                        <Button size="xs" onClick={() => loadDetail(item)}>
+                          <FileText size={11} /> View
                         </Button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+                        {item.status === "draft" && (
+                          <Button size="xs" variant="primary" onClick={() => submitMutation.mutate(item.id)}>
+                            <Send size={11} /> Submit
+                          </Button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="expense-mobile-list">
+          {filtered.length === 0 ? (
+            <div className="empty-state">No expenses found{tab !== "all" ? ` with status "${tab}"` : ""}.</div>
+          ) : (
+            filtered.map((item) => (
+              <div key={item.id} className="expense-mobile-card">
+                <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", alignItems: "flex-start" }}>
+                  <div>
+                    <p style={{ margin: 0, fontWeight: 700, fontSize: "0.9rem", color: "var(--text-primary)" }}>{item.description}</p>
+                    <p style={{ margin: "0.2rem 0 0", fontSize: "0.76rem", color: "var(--text-secondary)" }}>
+                      {new Date(item.expense_date).toLocaleDateString()} · {item.category}
+                    </p>
+                  </div>
+                  <Badge status={item.status}>{item.status}</Badge>
+                </div>
+
+                <div style={{ marginTop: "0.6rem", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.35rem" }}>
+                  <p style={{ margin: 0, fontSize: "0.78rem", color: "var(--text-secondary)" }}>
+                    Amount: <strong style={{ color: "var(--text-primary)" }}>{item.amount} {item.currency}</strong>
+                  </p>
+                  <p style={{ margin: 0, fontSize: "0.78rem", color: "var(--text-secondary)", textAlign: "right" }}>
+                    Company: <strong style={{ color: "var(--text-primary)" }}>{item.converted_amount} {item.base_currency}</strong>
+                  </p>
+                </div>
+
+                <div style={{ marginTop: "0.7rem" }}>
+                  <ExpenseLifecycleTracker status={item.status} />
+                </div>
+
+                <div style={{ marginTop: "0.75rem", display: "flex", gap: "0.4rem" }}>
+                  <Button size="xs" onClick={() => loadDetail(item)}>
+                    <FileText size={11} /> View
+                  </Button>
+                  {item.status === "draft" && (
+                    <Button size="xs" variant="primary" onClick={() => submitMutation.mutate(item.id)}>
+                      <Send size={11} /> Submit
+                    </Button>
+                  )}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
       </div>
 
       {/* Detail Modal */}
@@ -277,6 +379,11 @@ export function EmployeePage() {
                   </p>
                 </div>
               ))}
+            </div>
+
+            <div style={{ marginBottom: "1.5rem" }}>
+              <span className="label">Approval Progress</span>
+              <ExpenseLifecycleTracker status={selectedExpense.expense.status} />
             </div>
 
             {selectedExpense.expense.remarks && (
@@ -309,7 +416,6 @@ export function EmployeePage() {
                 </tbody>
               </table>
             )}
-            <TimelinePanel timeline={selectedExpense.timeline} />
 
             {/* Submit button for drafts */}
             {selectedExpense.expense.status === "draft" && (

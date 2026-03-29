@@ -575,3 +575,142 @@ tbody tr:last-child td {
   background: var(--accent-soft);
   color: var(--accent);
 }
+
+.status-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 0.28rem;
+  min-width: 230px;
+}
+
+.status-progress-track {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.status-progress-step {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.status-progress-dot {
+  width: 0.52rem;
+  height: 0.52rem;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-base);
+}
+
+.status-progress-label {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.status-progress-line {
+  flex: 1;
+  min-width: 0.75rem;
+  height: 2px;
+  border-radius: 100px;
+  background: var(--border);
+}
+
+.status-progress-step.complete .status-progress-dot,
+.status-progress-step.current .status-progress-dot {
+  background: var(--success);
+  border-color: var(--success);
+}
+
+.status-progress-step.complete .status-progress-label,
+.status-progress-step.current .status-progress-label {
+  color: var(--success);
+}
+
+.status-progress-step.rejected .status-progress-dot {
+  background: var(--danger);
+  border-color: var(--danger);
+}
+
+.status-progress-step.rejected .status-progress-label {
+  color: var(--danger);
+}
+
+.status-progress-line.complete {
+  background: var(--success);
+}
+
+.status-progress-meta {
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.status-progress-meta.pending {
+  color: var(--warning);
+}
+
+.status-progress-meta.approved {
+  color: var(--success);
+}
+
+.status-progress-meta.rejected {
+  color: var(--danger);
+}
+
+.status-progress.compact {
+  min-width: 190px;
+}
+
+.status-progress.compact .status-progress-label {
+  font-size: 0.62rem;
+}
+
+.expense-table-wrap {
+  display: block;
+  overflow-x: auto;
+}
+
+.expense-mobile-list {
+  display: none;
+}
+
+.expense-mobile-card {
+  border-bottom: 1px solid var(--border);
+  padding: 0.85rem 0.9rem;
+}
+
+.expense-mobile-card:last-child {
+  border-bottom: none;
+}
+
+@media (max-width: 980px) {
+  .expense-table-wrap {
+    display: none;
+  }
+
+  .expense-mobile-list {
+    display: block;
+  }
+
+  .status-progress {
+    min-width: 0;
+  }
+
+  .status-progress-track {
+    gap: 0.2rem;
+  }
+
+  .status-progress-label {
+    font-size: 0.64rem;
+  }
+
+  .status-progress-meta {
+    font-size: 0.62rem;
+  }
+}
