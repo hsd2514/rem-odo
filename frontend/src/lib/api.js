@@ -49,6 +49,7 @@ export const api = {
   // Users
   users: () => request("/users"),
   createUser: (payload) => request("/users", { method: "POST", body: JSON.stringify(payload) }),
+  updateUser: (userId, payload) => request(`/users/${userId}`, { method: "PATCH", body: JSON.stringify(payload) }),
   sendPassword: (userId) => request(`/users/${userId}/send-password`, { method: "POST" }),
 
   // Workflow
@@ -69,6 +70,7 @@ export const api = {
   submitExpense: (id) => request(`/expenses/${id}/submit`, { method: "POST" }),
   myExpenses: () => request("/expenses/my"),
   teamExpenses: () => request("/expenses/team"),
+  companyExpenses: () => request("/expenses/company"),
   getExpenseDetail: (id) => request(`/expenses/${id}`),
   getExpenseTimeline: (id) => request(`/expenses/${id}/timeline`),
   previewConversion: ({ amount, from_currency, to_currency }) =>
@@ -82,6 +84,8 @@ export const api = {
   },
   attachReceipt: (expenseId, receiptId) =>
     request(`/expenses/${expenseId}/attach-receipt?receipt_id=${receiptId}`, { method: "POST" }),
+  escalateExpense: (expenseId, reason = "") =>
+    request(`/expenses/${expenseId}/escalate?reason=${encodeURIComponent(reason)}`, { method: "POST" }),
 
   // Approvals
   approve: (expenseId, comment = "") =>

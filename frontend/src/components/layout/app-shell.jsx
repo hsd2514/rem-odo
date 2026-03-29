@@ -5,6 +5,7 @@ import { LogOut, Shield, Users, Receipt, CheckCircle, BarChart3, ClipboardList, 
 const NAV_BY_ROLE = {
   admin: [
     { to: "/admin", label: "User Management", icon: Users },
+    { to: "/admin/expenses", label: "All Expenses", icon: Receipt },
     { to: "/admin/rules", label: "Approval Rules", icon: Shield },
     { to: "/admin/analytics", label: "Analytics", icon: BarChart3 },
     { to: "/audit", label: "Audit Stream", icon: ClipboardList },

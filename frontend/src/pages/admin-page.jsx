@@ -17,6 +17,8 @@ export function AdminPage() {
   const [newUser, setNewUser] = useState({ name: "", email: "", role: "employee", manager_id: "" });
   const [pwModal, setPwModal] = useState(null);
   const [bootstrapSummary, setBootstrapSummary] = useState(null);
+  const [editUser, setEditUser] = useState(null);
+  const [editPayload, setEditPayload] = useState({ role: "employee", manager_id: "" });
 
   const usersQuery = useQuery({ queryKey: ["users"], queryFn: api.users });
 
@@ -38,6 +40,16 @@ export function AdminPage() {
       toast.success("Temporary password generated and ready to share.", { key: "password-sent-success" });
     },
     onError: (err) => toast.error(`Password generation failed: ${err.message}`, { key: "password-sent-error" }),
+  });
+
+  const updateUserMutation = useMutation({
+    mutationFn: ({ id, payload }) => api.updateUser(id, payload),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["users"] });
+      toast.success("User updated successfully");
+      setEditUser(null);
+    },
+    onError: (err) => toast.error(err.message),
   });
 
   const seedDemoMutation = useMutation({
@@ -199,14 +211,28 @@ export function AdminPage() {
                   <td style={{ color: "var(--text-secondary)" }}>{u.manager_name || "—"}</td>
                   <td>
                     {u.role !== "admin" && (
-                      <Button
-                        size="xs"
-                        onClick={() => sendPwMutation.mutate(u.id)}
-                        title="Generate & share temporary password"
-                      >
-                        <Key size={12} />
-                        Send Password
-                      </Button>
+                      <div style={{ display: "flex", gap: "0.35rem" }}>
+                        <Button
+                          size="xs"
+                          onClick={() => {
+                            setEditUser(u);
+                            setEditPayload({
+                              role: u.role,
+                              manager_id: u.manager_id ? String(u.manager_id) : "",
+                            });
+                          }}
+                        >
+                          Edit
+                        </Button>
+                        <Button
+                          size="xs"
+                          onClick={() => sendPwMutation.mutate(u.id)}
+                          title="Generate & share temporary password"
+                        >
+                          <Key size={12} />
+                          Send Password
+                        </Button>
+                      </div>
                     )}
                   </td>
                 </tr>
@@ -215,6 +241,49 @@ export function AdminPage() {
           </tbody>
         </table>
       </div>
+
+      {/* Edit User Modal */}
+      <Modal open={!!editUser} onClose={() => setEditUser(null)} title="Edit User">
+        {editUser && (
+          <div style={{ display: "grid", gap: "0.75rem" }}>
+            <div>
+              <span className="label">User</span>
+              <p style={{ margin: 0, fontWeight: 600 }}>{editUser.name} ({editUser.email})</p>
+            </div>
+            <Select
+              label="Role"
+              value={editPayload.role}
+              onChange={(e) => setEditPayload((p) => ({ ...p, role: e.target.value }))}
+            >
+              <option value="employee">Employee</option>
+              <option value="manager">Manager</option>
+            </Select>
+            <Select
+              label="Manager"
+              value={editPayload.manager_id}
+              onChange={(e) => setEditPayload((p) => ({ ...p, manager_id: e.target.value }))}
+            >
+              <option value="">No Manager</option>
+              {managerOptions.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+            </Select>
+            <div style={{ display: "flex", gap: "0.5rem" }}>
+              <Button
+                variant="primary"
+                onClick={() => updateUserMutation.mutate({
+                  id: editUser.id,
+                  payload: {
+                    role: editPayload.role,
+                    manager_id: editPayload.manager_id ? Number(editPayload.manager_id) : null,
+                  },
+                })}
+              >
+                {updateUserMutation.isPending ? "Saving..." : "Save Changes"}
+              </Button>
+              <Button onClick={() => setEditUser(null)}>Cancel</Button>
+            </div>
+          </div>
+        )}
+      </Modal>
 
       {/* Password Modal */}
       <Modal open={!!pwModal} onClose={() => setPwModal(null)} title="Generated Password">

@@ -8,7 +8,7 @@ class Settings(BaseSettings):
     access_token_exp_minutes: int = 30
     refresh_token_exp_minutes: int = 60 * 24 * 7
     password_reset_exp_minutes: int = 15
-    cors_origins: str = "http://localhost:5173"
+    cors_origins: str = "http://localhost:5173,http://localhost:5174,http://localhost:5175,http://localhost:5176"
     frontend_url: str = "http://localhost:5173"
 
     # SMTP (Google)

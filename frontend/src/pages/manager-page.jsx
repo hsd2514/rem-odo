@@ -45,6 +45,7 @@ export function ManagerPage() {
   const [inlineComments, setInlineComments] = useState({});
   const [bulkActionInFlight, setBulkActionInFlight] = useState(null);
   const [selectedExpense, setSelectedExpense] = useState(null);
+  const [escalationReason, setEscalationReason] = useState("");
   const [filters, setFilters] = useState(defaultFilters);
   const [sortConfig, setSortConfig] = useState({ key: "expense_date", direction: "desc" });
   const [savedPresets, setSavedPresets] = useState(() => loadPresets());
@@ -81,10 +82,22 @@ export function ManagerPage() {
     },
   });
 
+  const escalateMutation = useMutation({
+    mutationFn: ({ id, reason }) => api.escalateExpense(id, reason),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["team-expenses"] });
+      toast.success("Expense escalated for review");
+      setSelectedExpense(null);
+      setEscalationReason("");
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
   const loadDetail = async (expense) => {
     try {
       const detail = await api.getExpenseDetail(expense.id);
       setSelectedExpense(detail);
+      setEscalationReason("");
     } catch {
       setSelectedExpense({ expense, approval_logs: [] });
     }
@@ -763,6 +776,31 @@ export function ManagerPage() {
                   ))}
                 </tbody>
               </table>
+            )}
+
+            {selectedExpense.expense.status === "pending" && (
+              <>
+                <hr className="divider" />
+                <div style={{ display: "grid", gap: "0.65rem" }}>
+                  <Input
+                    label="Escalation Reason"
+                    placeholder="Why does this need escalation?"
+                    value={escalationReason}
+                    onChange={(e) => setEscalationReason(e.target.value)}
+                  />
+                  <div>
+                    <Button
+                      variant="ghost"
+                      onClick={() => escalateMutation.mutate({
+                        id: selectedExpense.expense.id,
+                        reason: escalationReason.trim() || "Escalated for review",
+                      })}
+                    >
+                      Escalate Expense
+                    </Button>
+                  </div>
+                </div>
+              </>
             )}
           </div>
         )}

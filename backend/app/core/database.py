@@ -50,8 +50,32 @@ def init_db() -> None:
         )
         conn.execute(
             text(
+                "ALTER TABLE approvalflow "
+                "ADD COLUMN IF NOT EXISTS auto_approve_approvers JSON"
+            )
+        )
+        conn.execute(
+            text(
                 "ALTER TABLE receipt "
                 "ADD COLUMN IF NOT EXISTS file_hash VARCHAR DEFAULT ''"
+            )
+        )
+        conn.execute(
+            text(
+                "ALTER TABLE expense "
+                "ADD COLUMN IF NOT EXISTS escalated_to INTEGER"
+            )
+        )
+        conn.execute(
+            text(
+                "ALTER TABLE expense "
+                "ADD COLUMN IF NOT EXISTS escalated_at TIMESTAMP"
+            )
+        )
+        conn.execute(
+            text(
+                "ALTER TABLE expense "
+                "ADD COLUMN IF NOT EXISTS escalation_reason VARCHAR"
             )
         )
 

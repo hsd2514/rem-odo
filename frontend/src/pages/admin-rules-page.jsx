@@ -23,6 +23,7 @@ export function AdminRulesPage() {
     min_approval_percentage: 60,
     approverIds: [],
     requiredApproverIds: [],
+    autoApproveApproverIds: [],
   });
 
   const usersQuery = useQuery({ queryKey: ["users"], queryFn: api.users });
@@ -49,6 +50,7 @@ export function AdminRulesPage() {
           min_approval_percentage: data.min_approval_percentage,
           approverIds: data.approvers || [],
           requiredApproverIds: data.required_approvers || [],
+          autoApproveApproverIds: data.auto_approve_approvers || [],
         });
       } else {
         setFlow({
@@ -58,6 +60,7 @@ export function AdminRulesPage() {
           min_approval_percentage: 60,
           approverIds: [],
           requiredApproverIds: [],
+          autoApproveApproverIds: [],
         });
       }
     }).catch(() => {});
@@ -87,6 +90,15 @@ export function AdminRulesPage() {
       requiredApproverIds: p.requiredApproverIds.includes(id)
         ? p.requiredApproverIds.filter((x) => x !== id)
         : [...p.requiredApproverIds, id],
+    }));
+  };
+
+  const toggleAutoApprove = (id) => {
+    setFlow((p) => ({
+      ...p,
+      autoApproveApproverIds: p.autoApproveApproverIds.includes(id)
+        ? p.autoApproveApproverIds.filter((x) => x !== id)
+        : [...p.autoApproveApproverIds, id],
     }));
   };
 
@@ -132,6 +144,7 @@ export function AdminRulesPage() {
       min_approval_percentage: flow.min_approval_percentage,
       approvers: flow.approverIds,
       required_approvers: flow.requiredApproverIds,
+      auto_approve_approvers: flow.autoApproveApproverIds,
     });
   };
 
@@ -147,6 +160,11 @@ export function AdminRulesPage() {
   const requiredApprovers = useMemo(
     () => allApprovers.filter((a) => flow.requiredApproverIds.includes(a.id)),
     [allApprovers, flow.requiredApproverIds]
+  );
+
+  const autoApproveApprovers = useMemo(
+    () => allApprovers.filter((a) => flow.autoApproveApproverIds.includes(a.id)),
+    [allApprovers, flow.autoApproveApproverIds]
   );
 
   const explanation = useMemo(() => {
@@ -165,6 +183,9 @@ export function AdminRulesPage() {
     const requiredNames = requiredApprovers.length > 0
       ? requiredApprovers.map((a) => a.name).join(", ")
       : "None";
+    const autoApproveNames = autoApproveApprovers.length > 0
+      ? autoApproveApprovers.map((a) => a.name).join(", ")
+      : "None";
 
     const managerLine = flow.manager_first
       ? `Manager-first is ON, so ${selectedEmployee.manager_name || "the assigned manager"} is prioritized before other approvers when available.`
@@ -179,6 +200,7 @@ export function AdminRulesPage() {
     return [
       `Configured approvers: ${approverNames}.`,
       `Mandatory approvers: ${requiredNames}.`,
+      `Auto-approve triggers: ${autoApproveNames}.`,
       managerLine,
       sequenceLine,
       thresholdLine,
@@ -187,6 +209,7 @@ export function AdminRulesPage() {
     selectedEmployee,
     selectedApprovers,
     requiredApprovers,
+    autoApproveApprovers,
     flow.manager_first,
     flow.sequential,
     flow.min_approval_percentage,
@@ -257,6 +280,7 @@ export function AdminRulesPage() {
                   {allApprovers.map((approver, idx) => {
                     const isSelected = flow.approverIds.includes(approver.id);
                     const isRequired = flow.requiredApproverIds.includes(approver.id);
+                    const isAutoApprove = flow.autoApproveApproverIds.includes(approver.id);
                     return (
                       <div
                         key={approver.id}
@@ -288,13 +312,23 @@ export function AdminRulesPage() {
                           {isRequired && (
                             <Badge status="pending">Mandatory</Badge>
                           )}
+                          {isAutoApprove && (
+                            <Badge status="approved">Auto-approve</Badge>
+                          )}
                         </div>
                         {isSelected && (
-                          <Checkbox
-                            label="Required"
-                            checked={isRequired}
-                            onChange={() => toggleRequired(approver.id)}
-                          />
+                          <div style={{ display: "flex", gap: "0.5rem" }}>
+                            <Checkbox
+                              label="Required"
+                              checked={isRequired}
+                              onChange={() => toggleRequired(approver.id)}
+                            />
+                            <Checkbox
+                              label="Auto-approve"
+                              checked={isAutoApprove}
+                              onChange={() => toggleAutoApprove(approver.id)}
+                            />
+                          </div>
                         )}
                       </div>
                     );
