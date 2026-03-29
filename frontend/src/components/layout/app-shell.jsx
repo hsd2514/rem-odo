@@ -1,18 +1,26 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/auth-context";
-import { LogOut, Shield, Users, Receipt, CheckCircle, BarChart3 } from "lucide-react";
+import { LogOut, Shield, Users, Receipt, CheckCircle, BarChart3, ClipboardList, Settings } from "lucide-react";
 
 const NAV_BY_ROLE = {
   admin: [
     { to: "/admin", label: "User Management", icon: Users },
     { to: "/admin/rules", label: "Approval Rules", icon: Shield },
     { to: "/admin/analytics", label: "Analytics", icon: BarChart3 },
+    { to: "/audit", label: "Audit Stream", icon: ClipboardList },
+    { to: "/settings", label: "Settings", icon: Settings },
   ],
   employee: [
     { to: "/employee", label: "My Expenses", icon: Receipt },
+    { to: "/admin/analytics", label: "Analytics", icon: BarChart3 },
+    { to: "/audit", label: "Activity Log", icon: ClipboardList },
+    { to: "/settings", label: "Settings", icon: Settings },
   ],
   manager: [
     { to: "/manager", label: "Approvals", icon: CheckCircle },
+    { to: "/admin/analytics", label: "Analytics", icon: BarChart3 },
+    { to: "/audit", label: "Audit Stream", icon: ClipboardList },
+    { to: "/settings", label: "Settings", icon: Settings },
   ],
 };
 
@@ -25,7 +33,7 @@ export function AppShell({ children }) {
 
   return (
     <div style={{ display: "flex", minHeight: "100vh" }}>
-      {/* Sidebar */}
+      {/* Sidebar — fixed to viewport height */}
       <aside
         style={{
           width: "240px",
@@ -34,10 +42,14 @@ export function AppShell({ children }) {
           display: "flex",
           flexDirection: "column",
           flexShrink: 0,
+          position: "sticky",
+          top: 0,
+          height: "100vh",
+          overflow: "hidden",
         }}
       >
         {/* Logo */}
-        <div style={{ padding: "1.5rem 1.25rem", borderBottom: "1px solid var(--border)" }}>
+        <div style={{ padding: "1.5rem 1.25rem", borderBottom: "1px solid var(--border)", flexShrink: 0 }}>
           <h1
             className="font-display"
             style={{ fontSize: "1.15rem", color: "var(--accent)", lineHeight: 1.3, margin: 0 }}
@@ -49,8 +61,8 @@ export function AppShell({ children }) {
           </p>
         </div>
 
-        {/* Nav */}
-        <nav style={{ flex: 1, padding: "0.75rem 0.5rem", display: "flex", flexDirection: "column", gap: "2px" }}>
+        {/* Nav — scrollable if many items */}
+        <nav style={{ flex: 1, padding: "0.75rem 0.5rem", display: "flex", flexDirection: "column", gap: "2px", overflowY: "auto", minHeight: 0 }}>
           {navItems.map((item) => {
             const active = location.pathname === item.to || location.pathname.startsWith(item.to + "/");
             const Icon = item.icon;
@@ -70,6 +82,7 @@ export function AppShell({ children }) {
                   background: active ? "var(--accent-soft)" : "transparent",
                   textDecoration: "none",
                   transition: "all 0.15s",
+                  flexShrink: 0,
                 }}
               >
                 <Icon size={16} strokeWidth={active ? 2.5 : 2} />
@@ -79,7 +92,7 @@ export function AppShell({ children }) {
           })}
         </nav>
 
-        {/* User */}
+        {/* User — always pinned to bottom */}
         <div
           style={{
             borderTop: "1px solid var(--border)",
@@ -87,6 +100,7 @@ export function AppShell({ children }) {
             display: "flex",
             alignItems: "center",
             gap: "0.75rem",
+            flexShrink: 0,
           }}
         >
           <div

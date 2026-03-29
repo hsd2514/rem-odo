@@ -15,7 +15,7 @@ router = APIRouter()
 def audit_stream(
     limit: int = 100,
     session: Session = Depends(get_session),
-    _: User = Depends(require_role("admin", "manager")),
+    _: User = Depends(require_role("admin", "manager", "employee")),
     current_user: User = Depends(get_current_user),
 ) -> list[AuditStreamItemResponse]:
     safe_limit = max(1, min(limit, 500))

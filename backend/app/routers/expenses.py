@@ -17,6 +17,7 @@ from app.models import (
 )
 from app.schemas import (
     ApprovalLogResponse,
+    CurrencyPreviewResponse,
     ExpenseTimelineResponse,
     ExpenseCreateRequest,
     ExpenseDetailResponse,
@@ -25,7 +26,7 @@ from app.schemas import (
     ReceiptResponse,
     TimelineEventResponse,
 )
-from app.services.currency import convert_currency
+from app.services.currency import convert_currency, get_conversion_preview
 from app.services.workflow import create_steps_for_expense
 
 router = APIRouter()
@@ -163,6 +164,26 @@ async def submit_expense(
     return _expense_to_response(expense, current_user.name)
 
 
+@router.get("/preview-conversion", response_model=CurrencyPreviewResponse)
+async def preview_conversion(
+    amount: float,
+    from_currency: str,
+    to_currency: str | None = None,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> CurrencyPreviewResponse:
+    if amount < 0:
+        raise HTTPException(status_code=400, detail="Amount must be non-negative")
+
+    company = session.get(Company, current_user.company_id)
+    if not company:
+        raise HTTPException(status_code=404, detail="Company not found")
+
+    target_currency = (to_currency or company.default_currency).upper()
+    quote = await get_conversion_preview(amount, from_currency, target_currency)
+    return CurrencyPreviewResponse(**quote)
+
+
 @router.post("/upload-receipt", response_model=OCRResult)
 async def upload_receipt(
     file: UploadFile = File(...),
@@ -170,26 +191,39 @@ async def upload_receipt(
     _: User = Depends(require_role("employee")),
     current_user: User = Depends(get_current_user),
 ) -> OCRResult:
+    from app.services.duplicate_check import check_duplicate, compute_hash
     from app.services.file_storage import save_upload
     from app.services.ocr import run_ocr
 
     contents = await file.read()
+
+    # Compute hash BEFORE writing to disk so we can detect duplicates early
+    file_hash = compute_hash(contents)
     file_path = save_upload(contents, file.filename or "receipt.jpg")
 
     receipt = Receipt(
         file_name=file.filename or "receipt.jpg",
         file_path=file_path,
         mime_type=file.content_type or "image/jpeg",
+        file_hash=file_hash,
     )
     session.add(receipt)
     session.commit()
     session.refresh(receipt)
 
+    # Run OCR
     ocr_result = run_ocr(file_path)
-
     receipt.ocr_payload = ocr_result.model_dump()
     session.add(receipt)
     session.commit()
+
+    # Duplicate detection against company's receipt history
+    dup = check_duplicate(
+        session=session,
+        file_hash=file_hash,
+        company_id=current_user.company_id,
+        user_id=current_user.id,
+    )
 
     return OCRResult(
         receipt_id=receipt.id,
@@ -197,6 +231,12 @@ async def upload_receipt(
         vendor=ocr_result.vendor,
         expense_date=ocr_result.expense_date,
         category_guess=ocr_result.category_guess,
+        is_duplicate=dup.is_duplicate,
+        duplicate_expense_id=dup.duplicate_expense_id,
+        duplicate_description=dup.duplicate_description,
+        duplicate_amount=dup.duplicate_amount,
+        duplicate_currency=dup.duplicate_currency,
+        duplicate_date=dup.duplicate_date,
     )
 
 

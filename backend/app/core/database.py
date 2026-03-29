@@ -48,6 +48,12 @@ def init_db() -> None:
                 "ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE"
             )
         )
+        conn.execute(
+            text(
+                "ALTER TABLE receipt "
+                "ADD COLUMN IF NOT EXISTS file_hash VARCHAR DEFAULT ''"
+            )
+        )
 
 
 def get_session() -> Generator[Session, None, None]:

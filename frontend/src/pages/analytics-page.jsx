@@ -39,11 +39,16 @@ export function AnalyticsPage() {
     queryKey: ["analytics-team", filters],
     queryFn: () => api.analyticsTeam(filters),
   });
+  const topSpendersQ = useQuery({
+    queryKey: ["analytics-top-spenders", filters],
+    queryFn: () => api.analyticsTopSpenders({ ...filters, limit: 5 }),
+  });
 
   const summary = summaryQ.data || {};
   const monthly = monthlyQ.data || [];
   const categories = categoryQ.data || [];
   const team = teamQ.data || [];
+  const topSpenders = topSpendersQ.data || [];
 
   // Build filter option lists from data
   const categoryOptions = useMemo(() => {
@@ -77,7 +82,21 @@ export function AnalyticsPage() {
     [monthly]
   );
 
-  const isLoading = summaryQ.isLoading;
+  const isLoading = summaryQ.isLoading || monthlyQ.isLoading || categoryQ.isLoading || teamQ.isLoading || topSpendersQ.isLoading;
+  const hasError = summaryQ.isError || monthlyQ.isError || categoryQ.isError || teamQ.isError || topSpendersQ.isError;
+  const errorMessage =
+    summaryQ.error?.message ||
+    monthlyQ.error?.message ||
+    categoryQ.error?.message ||
+    teamQ.error?.message ||
+    topSpendersQ.error?.message ||
+    "Failed to load analytics";
+  const isEmptyData =
+    (summary.total_count || 0) === 0 &&
+    monthly.length === 0 &&
+    categories.length === 0 &&
+    team.length === 0 &&
+    topSpenders.length === 0;
 
   return (
     <AppShell>
@@ -170,9 +189,17 @@ export function AnalyticsPage() {
         )}
       </div>
 
-      {/* Loading State */}
+      {/* Loading / Error / Empty States */}
       {isLoading ? (
         <div className="empty-state">Loading analytics…</div>
+      ) : hasError ? (
+        <div className="empty-state" style={{ color: "var(--danger)" }}>
+          Could not load analytics data. {errorMessage}
+        </div>
+      ) : isEmptyData ? (
+        <div className="empty-state">
+          No analytics data yet for the selected filters. Load sample data or submit expenses to populate this view.
+        </div>
       ) : (
         <>
           {/* KPI Cards */}
@@ -258,6 +285,28 @@ export function AnalyticsPage() {
                 }}
               />
             </div>
+          </div>
+
+          <div className="chart-card" style={{ marginBottom: "1.5rem" }}>
+            <h3 className="chart-title">Top Spenders</h3>
+            {topSpenders.length === 0 ? (
+              <p style={{ color: "var(--text-muted)", fontSize: "0.82rem", margin: 0 }}>
+                No spenders found for this filter range.
+              </p>
+            ) : (
+              <div className="top-spenders-row">
+                {topSpenders.map((spender, idx) => (
+                  <div className="spender-pill" key={spender.user_id}>
+                    <span className="spender-rank">#{idx + 1}</span>
+                    <div>
+                      <p className="spender-name">{spender.user_name}</p>
+                      <p className="spender-meta">{spender.expense_count} expense{spender.expense_count !== 1 ? "s" : ""}</p>
+                    </div>
+                    <span className="spender-amount">{FMT(spender.total_spend)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Charts Row: Monthly + Category */}

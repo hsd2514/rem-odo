@@ -193,6 +193,13 @@ class OCRResult(BaseModel):
     vendor: str | None = None
     expense_date: str | None = None
     category_guess: str | None = None
+    # Duplicate detection
+    is_duplicate: bool = False
+    duplicate_expense_id: int | None = None
+    duplicate_description: str | None = None
+    duplicate_amount: float | None = None
+    duplicate_currency: str | None = None
+    duplicate_date: str | None = None
 
 
 class ReceiptResponse(BaseModel):
@@ -202,6 +209,18 @@ class ReceiptResponse(BaseModel):
     file_path: str
     mime_type: str
     ocr_payload: dict = Field(default_factory=dict)
+
+
+class CurrencyPreviewResponse(BaseModel):
+    amount: float
+    from_currency: str
+    to_currency: str
+    converted_amount: float
+    rate: float
+    source: str
+    as_of: datetime
+    fallback: bool = False
+    message: str | None = None
 
 
 # ── Analytics ─────────────────────────────────────
@@ -248,3 +267,10 @@ class TeamBreakdownItem(BaseModel):
     pending_count: int = 0
     approved_count: int = 0
     rejected_count: int = 0
+
+
+class TopSpenderItem(BaseModel):
+    user_id: int
+    user_name: str
+    total_spend: float = 0.0
+    expense_count: int = 0

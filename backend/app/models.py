@@ -89,6 +89,7 @@ class Receipt(SQLModel, table=True):
     file_name: str
     file_path: str = ""
     mime_type: str = "image/jpeg"
+    file_hash: str = Field(default="", index=True)  # SHA-256 of raw bytes for duplicate detection
     ocr_payload: dict = Field(default_factory=dict, sa_column=Column(JSON))
 
 

@@ -16,6 +16,7 @@ from app.schemas import (
     AnalyticsSummary,
     CategoryBreakdownItem,
     MonthlySpendItem,
+    TopSpenderItem,
     TeamBreakdownItem,
 )
 
@@ -51,7 +52,7 @@ def analytics_summary(
     category: str | None = Query(None),
     user_id: int | None = Query(None),
     session: Session = Depends(get_session),
-    _: User = Depends(require_role("admin")),
+    _: User = Depends(require_role("admin", "manager", "employee")),
     current_user: User = Depends(get_current_user),
 ) -> AnalyticsSummary:
     base = select(Expense)
@@ -85,7 +86,7 @@ def monthly_spend(
     category: str | None = Query(None),
     user_id: int | None = Query(None),
     session: Session = Depends(get_session),
-    _: User = Depends(require_role("admin")),
+    _: User = Depends(require_role("admin", "manager", "employee")),
     current_user: User = Depends(get_current_user),
 ) -> list[MonthlySpendItem]:
     base = select(Expense).where(Expense.company_id == current_user.company_id)
@@ -139,7 +140,7 @@ def category_breakdown(
     month: str | None = Query(None, description="YYYY-MM"),
     user_id: int | None = Query(None),
     session: Session = Depends(get_session),
-    _: User = Depends(require_role("admin")),
+    _: User = Depends(require_role("admin", "manager", "employee")),
     current_user: User = Depends(get_current_user),
 ) -> list[CategoryBreakdownItem]:
     base = select(Expense)
@@ -173,7 +174,7 @@ def team_breakdown(
     month: str | None = Query(None, description="YYYY-MM"),
     category: str | None = Query(None),
     session: Session = Depends(get_session),
-    _: User = Depends(require_role("admin")),
+    _: User = Depends(require_role("admin", "manager", "employee")),
     current_user: User = Depends(get_current_user),
 ) -> list[TeamBreakdownItem]:
     base = select(Expense)
@@ -215,3 +216,40 @@ def team_breakdown(
         )
     result.sort(key=lambda x: x.total_spend, reverse=True)
     return result
+
+
+@router.get("/top-spenders", response_model=list[TopSpenderItem])
+def top_spenders(
+    month: str | None = Query(None, description="YYYY-MM"),
+    category: str | None = Query(None),
+    limit: int = Query(5, ge=1, le=50),
+    session: Session = Depends(get_session),
+    _: User = Depends(require_role("admin", "manager", "employee")),
+    current_user: User = Depends(get_current_user),
+) -> list[TopSpenderItem]:
+    base = select(Expense)
+    base = _apply_filters(base, current_user.company_id, month, category, None)
+    expenses = session.exec(base).all()
+
+    by_user: dict[int, dict] = {}
+    for exp in expenses:
+        bucket = by_user.setdefault(exp.user_id, {"total": 0.0, "count": 0})
+        bucket["total"] += exp.converted_amount
+        bucket["count"] += 1
+
+    result: list[TopSpenderItem] = []
+    for user_id, data in by_user.items():
+        user = session.get(User, user_id)
+        if not user:
+            continue
+        result.append(
+            TopSpenderItem(
+                user_id=user_id,
+                user_name=user.name,
+                total_spend=round(data["total"], 2),
+                expense_count=data["count"],
+            )
+        )
+
+    result.sort(key=lambda x: x.total_spend, reverse=True)
+    return result[:limit]
