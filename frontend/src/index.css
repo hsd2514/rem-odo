@@ -697,6 +697,52 @@ tbody tr:last-child td {
   border-bottom: none;
 }
 
+.manager-table-wrap {
+  display: block;
+  overflow-x: auto;
+}
+
+.manager-mobile-list {
+  display: none;
+}
+
+.manager-mobile-card {
+  border-bottom: 1px solid var(--border);
+  padding: 0.85rem 0.95rem 0.55rem;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.58), rgba(255, 255, 255, 0.2));
+}
+
+.manager-mobile-card:last-child {
+  border-bottom: none;
+}
+
+.manager-mobile-actions {
+  margin-top: 0.72rem;
+  display: flex;
+  gap: 0.35rem;
+  align-items: center;
+  flex-wrap: wrap;
+  position: sticky;
+  bottom: -0.55rem;
+  padding: 0.42rem 0 0.35rem;
+  background: linear-gradient(180deg, rgba(248, 248, 246, 0), rgba(248, 248, 246, 0.95) 36%, rgba(248, 248, 246, 1));
+  border-top: 1px solid rgba(210, 210, 203, 0.6);
+}
+
+@media (max-width: 1240px) {
+  .manager-filter-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .manager-range-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .manager-preset-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
 @media (max-width: 980px) {
   .expense-table-wrap {
     display: none;
@@ -720,6 +766,25 @@ tbody tr:last-child td {
 
   .status-progress-meta {
     font-size: 0.62rem;
+  }
+
+  .manager-table-wrap {
+    display: none;
+  }
+
+  .manager-mobile-list {
+    display: block;
+  }
+
+  .manager-filter-grid,
+  .manager-range-grid,
+  .manager-preset-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .manager-mobile-actions .btn {
+    flex: 1;
+    justify-content: center;
   }
 }
 @media (max-width: 1024px) {

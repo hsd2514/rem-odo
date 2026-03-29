@@ -284,7 +284,7 @@ export function ManagerPage() {
       </div>
 
       <div className="card" style={{ padding: "1rem", marginBottom: "1rem" }}>
-        <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr", gap: "0.75rem", marginBottom: "0.75rem" }}>
+        <div className="manager-filter-grid" style={{ display: "grid", gap: "0.75rem", marginBottom: "0.75rem" }}>
           <Input
             label="Search"
             placeholder="Search by subject, user, category, status, amount..."
@@ -324,7 +324,7 @@ export function ManagerPage() {
           </Select>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr auto auto", gap: "0.75rem", alignItems: "end" }}>
+        <div className="manager-range-grid" style={{ display: "grid", gap: "0.75rem", alignItems: "end" }}>
           <Select
             label="Date Range"
             value={filters.dateRange}
@@ -360,7 +360,7 @@ export function ManagerPage() {
       </div>
 
       <div className="card" style={{ padding: "1rem", marginBottom: "1.5rem" }}>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto auto", gap: "0.75rem", alignItems: "end" }}>
+        <div className="manager-preset-grid" style={{ display: "grid", gap: "0.75rem", alignItems: "end" }}>
           <Input
             label="Save Current Filters As"
             placeholder="e.g., Pending Travel This Month"
@@ -383,63 +383,112 @@ export function ManagerPage() {
       </div>
 
       <div className="card" style={{ overflow: "hidden", marginBottom: "1.5rem" }}>
-        <table>
-          <thead>
-            <tr>
-              <th style={{ cursor: "pointer" }} onClick={() => setSort("description")}>Subject{sortIndicator("description")}</th>
-              <th style={{ cursor: "pointer" }} onClick={() => setSort("user_name")}>Request Owner{sortIndicator("user_name")}</th>
-              <th style={{ cursor: "pointer" }} onClick={() => setSort("category")}>Category{sortIndicator("category")}</th>
-              <th style={{ cursor: "pointer" }} onClick={() => setSort("expense_date")}>Date{sortIndicator("expense_date")}</th>
-              <th style={{ cursor: "pointer" }} onClick={() => setSort("status")}>Status{sortIndicator("status")}</th>
-              <th style={{ cursor: "pointer" }} onClick={() => setSort("amount")}>Amount (Company Currency){sortIndicator("amount")}</th>
-              <th style={{ width: "200px" }}>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredSorted.length === 0 ? (
-              <tr><td colSpan={7} className="empty-state">No expenses match the current filters.</td></tr>
-            ) : (
-              filteredSorted.map((item) => (
-                <tr key={item.id} style={{ opacity: item.status === "pending" ? 1 : 0.75 }}>
-                  <td style={{ fontWeight: 600 }}>{item.description}</td>
-                  <td style={{ color: "var(--text-secondary)" }}>{item.user_name || `User #${item.user_id}`}</td>
-                  <td>{item.category}</td>
-                  <td style={{ color: "var(--text-secondary)", fontSize: "0.8rem" }}>
-                    {new Date(item.expense_date).toLocaleDateString()}
-                  </td>
-                  <td><Badge status={item.status}>{item.status}</Badge></td>
-                  <td>
-                    <span style={{ fontSize: "0.72rem", color: "var(--accent)", textDecoration: "line-through", marginRight: "0.5rem" }}>
-                      {item.amount} {item.currency}
-                    </span>
-                    <span style={{ fontWeight: 700 }}>
-                      {item.converted_amount} {item.base_currency}
-                    </span>
-                  </td>
-                  <td>
-                    <div style={{ display: "flex", gap: "0.35rem" }}>
-                      <Button size="xs" onClick={() => loadDetail(item)}>
-                        <Eye size={11} />
+        <div className="manager-table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th style={{ cursor: "pointer" }} onClick={() => setSort("description")}>Subject{sortIndicator("description")}</th>
+                <th style={{ cursor: "pointer" }} onClick={() => setSort("user_name")}>Request Owner{sortIndicator("user_name")}</th>
+                <th style={{ cursor: "pointer" }} onClick={() => setSort("category")}>Category{sortIndicator("category")}</th>
+                <th style={{ cursor: "pointer" }} onClick={() => setSort("expense_date")}>Date{sortIndicator("expense_date")}</th>
+                <th style={{ cursor: "pointer" }} onClick={() => setSort("status")}>Status{sortIndicator("status")}</th>
+                <th style={{ cursor: "pointer" }} onClick={() => setSort("amount")}>Amount (Company Currency){sortIndicator("amount")}</th>
+                <th style={{ width: "200px" }}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredSorted.length === 0 ? (
+                <tr><td colSpan={7} className="empty-state">No expenses match the current filters.</td></tr>
+              ) : (
+                filteredSorted.map((item) => (
+                  <tr key={item.id} style={{ opacity: item.status === "pending" ? 1 : 0.75 }}>
+                    <td style={{ fontWeight: 600 }}>{item.description}</td>
+                    <td style={{ color: "var(--text-secondary)" }}>{item.user_name || `User #${item.user_id}`}</td>
+                    <td>{item.category}</td>
+                    <td style={{ color: "var(--text-secondary)", fontSize: "0.8rem" }}>
+                      {new Date(item.expense_date).toLocaleDateString()}
+                    </td>
+                    <td><Badge status={item.status}>{item.status}</Badge></td>
+                    <td>
+                      <span style={{ fontSize: "0.72rem", color: "var(--accent)", textDecoration: "line-through", marginRight: "0.5rem" }}>
+                        {item.amount} {item.currency}
+                      </span>
+                      <span style={{ fontWeight: 700 }}>
+                        {item.converted_amount} {item.base_currency}
+                      </span>
+                    </td>
+                    <td>
+                      <div style={{ display: "flex", gap: "0.35rem" }}>
+                        <Button size="xs" onClick={() => loadDetail(item)}>
+                          <Eye size={11} />
+                        </Button>
+                        {item.status === "pending" ? (
+                          <>
+                            <Button size="xs" variant="success" onClick={() => setCommentModal({ id: item.id, action: "approve" })}>
+                              <CheckCircle size={11} /> Approve
+                            </Button>
+                            <Button size="xs" variant="danger" onClick={() => setCommentModal({ id: item.id, action: "reject" })}>
+                              <XCircle size={11} /> Reject
+                            </Button>
+                          </>
+                        ) : (
+                          <span style={{ color: "var(--text-muted)", fontSize: "0.75rem" }}>No actions</span>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+        <div className="manager-mobile-list">
+          {filteredSorted.length === 0 ? (
+            <div className="empty-state">No expenses match the current filters.</div>
+          ) : (
+            filteredSorted.map((item) => (
+              <div key={item.id} className="manager-mobile-card">
+                <div style={{ display: "flex", justifyContent: "space-between", gap: "0.6rem", alignItems: "flex-start" }}>
+                  <div>
+                    <p style={{ margin: 0, fontWeight: 700, color: "var(--text-primary)", fontSize: "0.9rem" }}>{item.description}</p>
+                    <p style={{ margin: "0.22rem 0 0", color: "var(--text-secondary)", fontSize: "0.76rem" }}>
+                      {(item.user_name || `User #${item.user_id}`)} · {item.category}
+                    </p>
+                    <p style={{ margin: "0.18rem 0 0", color: "var(--text-muted)", fontSize: "0.72rem" }}>
+                      {new Date(item.expense_date).toLocaleDateString()}
+                    </p>
+                  </div>
+                  <Badge status={item.status}>{item.status}</Badge>
+                </div>
+                <div style={{ marginTop: "0.65rem", display: "flex", alignItems: "baseline", gap: "0.4rem", flexWrap: "wrap" }}>
+                  <span style={{ fontSize: "0.72rem", color: "var(--accent)", textDecoration: "line-through" }}>
+                    {item.amount} {item.currency}
+                  </span>
+                  <span style={{ fontWeight: 700, color: "var(--text-primary)", fontSize: "0.92rem" }}>
+                    {item.converted_amount} {item.base_currency}
+                  </span>
+                </div>
+                <div className="manager-mobile-actions">
+                  <Button size="xs" onClick={() => loadDetail(item)}>
+                    <Eye size={11} /> View
+                  </Button>
+                  {item.status === "pending" ? (
+                    <>
+                      <Button size="xs" variant="success" onClick={() => setCommentModal({ id: item.id, action: "approve" })}>
+                        <CheckCircle size={11} /> Approve
                       </Button>
-                      {item.status === "pending" ? (
-                        <>
-                          <Button size="xs" variant="success" onClick={() => setCommentModal({ id: item.id, action: "approve" })}>
-                            <CheckCircle size={11} /> Approve
-                          </Button>
-                          <Button size="xs" variant="danger" onClick={() => setCommentModal({ id: item.id, action: "reject" })}>
-                            <XCircle size={11} /> Reject
-                          </Button>
-                        </>
-                      ) : (
-                        <span style={{ color: "var(--text-muted)", fontSize: "0.75rem" }}>No actions</span>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+                      <Button size="xs" variant="danger" onClick={() => setCommentModal({ id: item.id, action: "reject" })}>
+                        <XCircle size={11} /> Reject
+                      </Button>
+                    </>
+                  ) : (
+                    <span style={{ color: "var(--text-muted)", fontSize: "0.74rem", fontWeight: 600 }}>No pending actions</span>
+                  )}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
       </div>
 
       {/* Comment / Decision Modal */}
