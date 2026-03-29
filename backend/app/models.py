@@ -63,6 +63,7 @@ class ApprovalFlow(SQLModel, table=True):
     min_approval_percentage: int = 60
     approvers: list[int] = Field(default_factory=list, sa_column=Column(JSON))
     required_approvers: list[int] = Field(default_factory=list, sa_column=Column(JSON))
+    auto_approve_approvers: list[int] = Field(default_factory=list, sa_column=Column(JSON))
 
 
 class Expense(SQLModel, table=True):
@@ -81,6 +82,9 @@ class Expense(SQLModel, table=True):
     applied_flow_id: int | None = Field(default=None, foreign_key="approvalflow.id", index=True)
     status: ExpenseStatus = ExpenseStatus.draft
     submitted_at: datetime = Field(default_factory=datetime.utcnow)
+    escalated_to: int | None = Field(default=None, foreign_key="user.id")
+    escalated_at: datetime | None = None
+    escalation_reason: str = ""
 
 
 class Receipt(SQLModel, table=True):
@@ -108,6 +112,18 @@ class ApprovalLog(SQLModel, table=True):
     approver_id: int = Field(foreign_key="user.id")
     decision: str
     comment: str = ""
+    timestamp: datetime = Field(default_factory=datetime.utcnow)
+
+
+class AuditEvent(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    company_id: int = Field(foreign_key="company.id", index=True)
+    event_type: str
+    actor_id: int | None = Field(default=None, foreign_key="user.id")
+    actor_role: str = ""
+    entity_type: str = ""
+    entity_id: int | None = None
+    message: str = ""
     timestamp: datetime = Field(default_factory=datetime.utcnow)
 
 

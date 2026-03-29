@@ -118,6 +118,19 @@ def apply_decision(session: Session, expense_id: int, approver_id: int, decision
         )
     )
 
+    auto_approvers = set(flow.auto_approve_approvers or [])
+    if decision == "approve" and approver_id in auto_approvers:
+        for item in steps:
+            if item.status == "pending":
+                item.status = "skipped"
+                session.add(item)
+        expense.status = ExpenseStatus.approved
+        session.add(step)
+        session.add(expense)
+        session.commit()
+        session.refresh(expense)
+        return expense
+
     approved = [item for item in steps if item.status == "approved"]
     rejected = [item for item in steps if item.status == "rejected"]
     required = set(flow.required_approvers)

@@ -8,6 +8,7 @@ from app.deps import get_current_user, require_role
 from app.models import (
     ApprovalLog,
     ApprovalStep,
+    AuditEvent,
     Company,
     EmployeeManagerMap,
     Expense,
@@ -48,6 +49,9 @@ def _expense_to_response(expense: Expense, user_name: str = "") -> ExpenseRespon
         remarks=expense.remarks,
         status=expense.status,
         submitted_at=expense.submitted_at,
+        escalated_to=expense.escalated_to,
+        escalated_at=expense.escalated_at,
+        escalation_reason=expense.escalation_reason,
     )
 
 
@@ -229,8 +233,11 @@ async def upload_receipt(
         receipt_id=receipt.id,
         amount=ocr_result.amount,
         vendor=ocr_result.vendor,
+        vendor_normalized=ocr_result.vendor_normalized,
         expense_date=ocr_result.expense_date,
         category_guess=ocr_result.category_guess,
+        expense_type=ocr_result.expense_type,
+        line_items=ocr_result.line_items,
         is_duplicate=dup.is_duplicate,
         duplicate_expense_id=dup.duplicate_expense_id,
         duplicate_description=dup.duplicate_description,
@@ -330,6 +337,66 @@ def team_expenses(
     return result
 
 
+@router.get("/company", response_model=list[ExpenseResponse])
+def company_expenses(
+    session: Session = Depends(get_session),
+    _: User = Depends(require_role("admin")),
+    current_user: User = Depends(get_current_user),
+) -> list[ExpenseResponse]:
+    expenses = session.exec(
+        select(Expense).where(Expense.company_id == current_user.company_id)
+    ).all()
+    result = []
+    for item in expenses:
+        user = session.get(User, item.user_id)
+        result.append(_expense_to_response(item, user.name if user else ""))
+    return result
+
+
+@router.post("/{expense_id}/escalate", response_model=ExpenseResponse)
+def escalate_expense(
+    expense_id: int,
+    reason: str = "",
+    session: Session = Depends(get_session),
+    _: User = Depends(require_role("manager", "admin")),
+    current_user: User = Depends(get_current_user),
+) -> ExpenseResponse:
+    expense = session.get(Expense, expense_id)
+    if not expense or expense.company_id != current_user.company_id:
+        raise HTTPException(status_code=404, detail="Expense not found")
+
+    expense.status = ExpenseStatus.escalated
+    expense.escalated_to = current_user.id
+    from datetime import datetime
+    expense.escalated_at = datetime.utcnow()
+    expense.escalation_reason = reason or "Escalated for review"
+
+    session.add(expense)
+    session.add(
+        ApprovalLog(
+            expense_id=expense.id,
+            approver_id=current_user.id,
+            decision="escalated",
+            comment=expense.escalation_reason,
+        )
+    )
+    session.add(
+        AuditEvent(
+            company_id=current_user.company_id,
+            event_type="expense_escalated",
+            actor_id=current_user.id,
+            actor_role=current_user.role.value,
+            entity_type="expense",
+            entity_id=expense.id,
+            message=expense.escalation_reason,
+        )
+    )
+    session.commit()
+    session.refresh(expense)
+    user = session.get(User, expense.user_id)
+    return _expense_to_response(expense, user.name if user else "")
+
+
 @router.get("/{expense_id}", response_model=ExpenseDetailResponse)
 def get_expense_detail(
     expense_id: int,
@@ -423,6 +490,20 @@ def get_expense_timeline(
                 actor_role=owner.role.value if owner else "",
                 message="Expense submitted for approval",
                 timestamp=expense.submitted_at,
+            )
+        )
+
+    if expense.escalated_at:
+        escalated_by = session.get(User, expense.escalated_to) if expense.escalated_to else None
+        events.append(
+            TimelineEventResponse(
+                id=f"expense-escalated-{expense.id}",
+                event_type="expense_escalated",
+                actor_id=escalated_by.id if escalated_by else None,
+                actor_name=escalated_by.name if escalated_by else "",
+                actor_role=escalated_by.role.value if escalated_by else "",
+                message=expense.escalation_reason or "Expense escalated",
+                timestamp=expense.escalated_at,
             )
         )
 

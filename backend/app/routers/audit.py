@@ -5,7 +5,7 @@ from sqlmodel import Session, select
 
 from app.core.database import get_session
 from app.deps import get_current_user, require_role
-from app.models import ApprovalLog, Expense, User
+from app.models import ApprovalLog, AuditEvent, Expense, User
 from app.schemas import AuditStreamItemResponse
 
 router = APIRouter()
@@ -30,6 +30,11 @@ def audit_stream(
         .join(Expense, ApprovalLog.expense_id == Expense.id)
         .where(Expense.company_id == current_user.company_id)
         .order_by(ApprovalLog.timestamp.desc())
+    ).all()
+    events = session.exec(
+        select(AuditEvent)
+        .where(AuditEvent.company_id == current_user.company_id)
+        .order_by(AuditEvent.timestamp.desc())
     ).all()
 
     items: list[AuditStreamItemResponse] = []
@@ -67,6 +72,23 @@ def audit_stream(
                 decision=log.decision,
                 message=log.comment or "Decision recorded",
                 timestamp=log.timestamp,
+            )
+        )
+
+    for event in events:
+        actor = session.get(User, event.actor_id) if event.actor_id else None
+        items.append(
+            AuditStreamItemResponse(
+                id=f"event-{event.id}",
+                event_type=event.event_type,
+                expense_id=event.entity_id or 0,
+                expense_description=event.message or event.entity_type,
+                actor_id=event.actor_id,
+                actor_name=actor.name if actor else "",
+                actor_role=event.actor_role,
+                decision=None,
+                message=event.message,
+                timestamp=event.timestamp,
             )
         )
 

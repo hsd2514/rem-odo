@@ -44,6 +44,11 @@ class UserCreateRequest(BaseModel):
     manager_id: int | None = None
 
 
+class UserUpdateRequest(BaseModel):
+    role: Role | None = None
+    manager_id: int | None = None
+
+
 class UserResponse(BaseModel):
     id: int
     name: str
@@ -89,6 +94,7 @@ class ApprovalFlowRequest(BaseModel):
     min_approval_percentage: int = Field(default=60, ge=1, le=100)
     approvers: list[int] = Field(default_factory=list)
     required_approvers: list[int] = Field(default_factory=list)
+    auto_approve_approvers: list[int] = Field(default_factory=list)
 
 
 class ApprovalFlowResponse(BaseModel):
@@ -106,6 +112,7 @@ class ApprovalFlowResponse(BaseModel):
     min_approval_percentage: int
     approvers: list[int]
     required_approvers: list[int]
+    auto_approve_approvers: list[int]
 
 
 class ExpenseCreateRequest(BaseModel):
@@ -133,6 +140,9 @@ class ExpenseResponse(BaseModel):
     remarks: str
     status: ExpenseStatus
     submitted_at: datetime
+    escalated_to: int | None = None
+    escalated_at: datetime | None = None
+    escalation_reason: str = ""
 
 
 class ApprovalLogResponse(BaseModel):
@@ -191,8 +201,11 @@ class OCRResult(BaseModel):
     receipt_id: int | None = None
     amount: float | None = None
     vendor: str | None = None
+    vendor_normalized: str | None = None
     expense_date: str | None = None
     category_guess: str | None = None
+    expense_type: str | None = None
+    line_items: list[dict] = Field(default_factory=list)
     # Duplicate detection
     is_duplicate: bool = False
     duplicate_expense_id: int | None = None

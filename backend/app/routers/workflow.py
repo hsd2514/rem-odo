@@ -32,6 +32,7 @@ def _flow_to_response(flow: ApprovalFlow) -> ApprovalFlowResponse:
         min_approval_percentage=flow.min_approval_percentage,
         approvers=flow.approvers or [],
         required_approvers=flow.required_approvers or [],
+        auto_approve_approvers=flow.auto_approve_approvers or [],
     )
 
 
@@ -61,6 +62,7 @@ def create_workflow(
         min_approval_percentage=payload.min_approval_percentage,
         approvers=payload.approvers,
         required_approvers=payload.required_approvers,
+        auto_approve_approvers=payload.auto_approve_approvers,
     )
     session.add(flow)
     session.commit()
@@ -110,6 +112,7 @@ def update_workflow(
             min_approval_percentage=payload.min_approval_percentage,
             approvers=payload.approvers,
             required_approvers=payload.required_approvers,
+            auto_approve_approvers=payload.auto_approve_approvers,
         )
         session.add(flow)
         session.commit()
@@ -127,6 +130,7 @@ def update_workflow(
     flow.min_approval_percentage = payload.min_approval_percentage
     flow.approvers = payload.approvers
     flow.required_approvers = payload.required_approvers
+    flow.auto_approve_approvers = payload.auto_approve_approvers
     session.add(flow)
     session.commit()
     session.refresh(flow)

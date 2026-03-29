@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import { ProtectedRoute } from "./components/layout/protected-route";
 import { AdminPage } from "./pages/admin-page";
+import { AdminExpensesPage } from "./pages/admin-expenses-page";
 import { AdminRulesPage } from "./pages/admin-rules-page";
 import { AnalyticsPage } from "./pages/analytics-page";
 import { AuditPage } from "./pages/audit-page";
@@ -14,6 +15,7 @@ function App() {
     <Routes>
       <Route path="/auth" element={<AuthPage />} />
       <Route path="/admin" element={<ProtectedRoute allowedRoles={["admin"]}><AdminPage /></ProtectedRoute>} />
+      <Route path="/admin/expenses" element={<ProtectedRoute allowedRoles={["admin"]}><AdminExpensesPage /></ProtectedRoute>} />
       <Route path="/admin/rules" element={<ProtectedRoute allowedRoles={["admin"]}><AdminRulesPage /></ProtectedRoute>} />
       <Route path="/admin/analytics" element={<ProtectedRoute allowedRoles={["admin", "manager", "employee"]}><AnalyticsPage /></ProtectedRoute>} />
       <Route path="/audit" element={<ProtectedRoute allowedRoles={["admin", "manager", "employee"]}><AuditPage /></ProtectedRoute>} />
