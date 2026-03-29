@@ -575,3 +575,5 @@ tbody tr:last-child td {
   background: var(--accent-soft);
   color: var(--accent);
 }
+
+@keyframes spin { to { transform: rotate(360deg); } }
