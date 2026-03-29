@@ -10,7 +10,7 @@ import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
 import { Tabs } from "../components/ui/tabs";
 import { Modal } from "../components/ui/modal";
-import { Plus, Upload, Send, FileText } from "lucide-react";
+import { AlertTriangle, Plus, Upload, Send, FileText } from "lucide-react";
 
 const POLICY_CONFIG = {
   defaultSoftLimit: 15000,
@@ -127,6 +127,7 @@ export function EmployeePage() {
   const [showForm, setShowForm] = useState(false);
   const [selectedExpense, setSelectedExpense] = useState(null);
   const [submitWarnings, setSubmitWarnings] = useState(null); // { expenseId, description, warnings[] }
+  const [duplicateWarning, setDuplicateWarning] = useState(null);
   const [conversionPreview, setConversionPreview] = useState(null);
   const [conversionLoading, setConversionLoading] = useState(false);
   const [conversionError, setConversionError] = useState("");
@@ -167,7 +168,13 @@ export function EmployeePage() {
   const uploadMutation = useMutation({
     mutationFn: (file) => api.uploadReceipt(file),
     onSuccess: (data) => {
-      toast.success("Receipt scanned successfully");
+      if (data.is_duplicate) {
+        setDuplicateWarning(data);
+        toast.error("Potential duplicate receipt detected. Please review before saving.");
+      } else {
+        setDuplicateWarning(null);
+        toast.success("Receipt scanned successfully");
+      }
       setForm((p) => ({
         ...p,
         amount: data.amount ? String(data.amount) : p.amount,
@@ -185,6 +192,7 @@ export function EmployeePage() {
       expense_date: new Date().toISOString().slice(0, 16),
       paid_by: "Self", currency: "USD", remarks: "",
     });
+    setDuplicateWarning(null);
   };
 
   useEffect(() => {
@@ -343,6 +351,28 @@ export function EmployeePage() {
       {showForm && (
         <div className="card" style={{ padding: "1.5rem", marginBottom: "1.5rem" }}>
           <h3 style={{ fontSize: "0.95rem", fontWeight: 700, marginBottom: "1rem" }}>New Expense</h3>
+          {duplicateWarning && (
+            <div className="policy-warning-banner" style={{ marginBottom: "1rem", borderColor: "rgba(239, 68, 68, 0.45)" }}>
+              <div style={{ display: "flex", gap: "0.55rem", alignItems: "flex-start" }}>
+                <AlertTriangle size={15} style={{ color: "var(--danger)", marginTop: "0.1rem", flexShrink: 0 }} />
+                <div>
+                  <p style={{ margin: 0, fontSize: "0.8rem", fontWeight: 700, color: "var(--danger)" }}>
+                    Potential duplicate receipt detected
+                  </p>
+                  <p style={{ margin: "0.25rem 0 0", fontSize: "0.76rem", color: "var(--text-secondary)" }}>
+                    Similar to: <strong>{duplicateWarning.duplicate_description || "existing expense"}</strong>
+                    {duplicateWarning.duplicate_amount != null && duplicateWarning.duplicate_currency
+                      ? ` (${duplicateWarning.duplicate_amount} ${duplicateWarning.duplicate_currency})`
+                      : ""}
+                    {duplicateWarning.duplicate_date ? ` on ${duplicateWarning.duplicate_date}` : ""}.
+                  </p>
+                  <p style={{ margin: "0.2rem 0 0", fontSize: "0.74rem", color: "var(--text-muted)" }}>
+                    This is a warning only. You can still save the draft if this is intentional.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
             <Input label="Description" placeholder="Restaurant bill, taxi fare..." value={form.description} onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))} />
             <Input label="Expense Date" type="datetime-local" value={form.expense_date} onChange={(e) => setForm((p) => ({ ...p, expense_date: e.target.value }))} />

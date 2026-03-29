@@ -191,26 +191,39 @@ async def upload_receipt(
     _: User = Depends(require_role("employee")),
     current_user: User = Depends(get_current_user),
 ) -> OCRResult:
+    from app.services.duplicate_check import check_duplicate, compute_hash
     from app.services.file_storage import save_upload
     from app.services.ocr import run_ocr
 
     contents = await file.read()
+
+    # Compute hash BEFORE writing to disk so we can detect duplicates early
+    file_hash = compute_hash(contents)
     file_path = save_upload(contents, file.filename or "receipt.jpg")
 
     receipt = Receipt(
         file_name=file.filename or "receipt.jpg",
         file_path=file_path,
         mime_type=file.content_type or "image/jpeg",
+        file_hash=file_hash,
     )
     session.add(receipt)
     session.commit()
     session.refresh(receipt)
 
+    # Run OCR
     ocr_result = run_ocr(file_path)
-
     receipt.ocr_payload = ocr_result.model_dump()
     session.add(receipt)
     session.commit()
+
+    # Duplicate detection against company's receipt history
+    dup = check_duplicate(
+        session=session,
+        file_hash=file_hash,
+        company_id=current_user.company_id,
+        user_id=current_user.id,
+    )
 
     return OCRResult(
         receipt_id=receipt.id,
@@ -218,6 +231,12 @@ async def upload_receipt(
         vendor=ocr_result.vendor,
         expense_date=ocr_result.expense_date,
         category_guess=ocr_result.category_guess,
+        is_duplicate=dup.is_duplicate,
+        duplicate_expense_id=dup.duplicate_expense_id,
+        duplicate_description=dup.duplicate_description,
+        duplicate_amount=dup.duplicate_amount,
+        duplicate_currency=dup.duplicate_currency,
+        duplicate_date=dup.duplicate_date,
     )
 
 
