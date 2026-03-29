@@ -257,6 +257,18 @@ def seed():
     print("=" * 50)
     print("  SEED COMPLETE")
     print("=" * 50)
+    print()
+    print("── SMTP (Forgot Password) ─────────────────────")
+    print("  To enable email-based password reset:")
+    print("  1. Go to https://myaccount.google.com/apppasswords")
+    print("  2. Generate a new App Password for 'Mail'")
+    print("  3. Set in backend/.env:")
+    print("     smtp_user=your_gmail@gmail.com")
+    print("     smtp_password=xxxx xxxx xxxx xxxx")
+    print()
+    print("  Without SMTP configured, reset links will be")
+    print("  printed to the backend console instead.")
+    print("=" * 50)
 
 
 if __name__ == "__main__":

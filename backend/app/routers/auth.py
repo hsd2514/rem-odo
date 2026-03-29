@@ -10,14 +10,17 @@ from app.deps import get_current_user
 from app.models import Company, EmployeeManagerMap, Role, SessionToken, User
 from app.schemas import (
     CountryItem,
+    ForgotPasswordRequest,
     LoginRequest,
     LogoutRequest,
     RefreshRequest,
+    ResetPasswordRequest,
     SignupRequest,
     TokenResponse,
     UserMeResponse,
 )
 from app.services.currency import get_country_currency
+from app.services.email import send_password_reset_email
 
 router = APIRouter()
 
@@ -69,6 +72,43 @@ def login(payload: LoginRequest, session: Session = Depends(get_session)) -> Tok
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
     return _issue_tokens_for_user(session, user)
+
+
+@router.post("/forgot-password")
+def forgot_password(payload: ForgotPasswordRequest, session: Session = Depends(get_session)):
+    """Send a password reset email. Always returns success to prevent email enumeration."""
+    user = session.exec(select(User).where(User.email == payload.email)).first()
+    if user:
+        reset_token = create_token(str(user.id), "password_reset", settings.password_reset_exp_minutes)
+        send_password_reset_email(user.email, user.name, reset_token)
+    return {"message": "If that email exists, a reset link has been sent."}
+
+
+@router.post("/reset-password")
+def reset_password(payload: ResetPasswordRequest, session: Session = Depends(get_session)):
+    """Reset the user's password using a valid reset token."""
+    from app.core.security import decode_token
+
+    try:
+        decoded = decode_token(payload.token)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Invalid or expired reset link") from exc
+
+    if decoded.get("type") != "password_reset":
+        raise HTTPException(status_code=400, detail="Invalid token type")
+
+    user_id = decoded.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=400, detail="Invalid token")
+
+    user = session.get(User, int(user_id))
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    user.password_hash = hash_password(payload.new_password)
+    session.add(user)
+    session.commit()
+    return {"message": "Password reset successfully. You can now sign in."}
 
 
 @router.post("/refresh", response_model=TokenResponse)

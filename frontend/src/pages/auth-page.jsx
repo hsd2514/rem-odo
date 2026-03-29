@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../lib/api";
 import { useAuth } from "../context/auth-context";
 import { useToast } from "../context/toast-context";
@@ -10,19 +10,39 @@ import { Select } from "../components/ui/select";
 
 export function AuthPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { login, isAuthenticated, role } = useAuth();
   const toast = useToast();
-  const [mode, setMode] = useState("login");
+
+  // Determine initial mode from URL (supports ?mode=reset&token=xxx)
+  const urlMode = searchParams.get("mode");
+  const urlToken = searchParams.get("token");
+  const [mode, setMode] = useState(() => {
+    if (urlMode === "reset" && urlToken) return "reset";
+    if (urlMode === "forgot") return "forgot";
+    return "login";
+  });
+
   const [signup, setSignup] = useState({
     name: "", email: "", password: "", confirmPassword: "", company_name: "", country: "India",
   });
   const [signin, setSignin] = useState({ email: "", password: "" });
+  const [forgotEmail, setForgotEmail] = useState("");
+  const [resetForm, setResetForm] = useState({ token: urlToken || "", newPassword: "", confirmPassword: "" });
 
   const countriesQuery = useQuery({ queryKey: ["countries"], queryFn: api.getCountries });
 
   useEffect(() => {
     if (isAuthenticated && role) navigate(`/${role}`);
   }, [isAuthenticated, role, navigate]);
+
+  // Update token if URL changes
+  useEffect(() => {
+    if (urlMode === "reset" && urlToken) {
+      setMode("reset");
+      setResetForm((p) => ({ ...p, token: urlToken }));
+    }
+  }, [urlMode, urlToken]);
 
   const signupMutation = useMutation({
     mutationFn: api.signup,
@@ -44,31 +64,51 @@ export function AuthPage() {
     onError: (err) => toast.error(err.message),
   });
 
+  const forgotMutation = useMutation({
+    mutationFn: (email) => api.forgotPassword(email),
+    onSuccess: () => {
+      toast.success("If that email exists, a reset link has been sent. Check your inbox.");
+    },
+    onError: () => {
+      // Always show success to prevent email enumeration
+      toast.success("If that email exists, a reset link has been sent. Check your inbox.");
+    },
+  });
+
+  const resetMutation = useMutation({
+    mutationFn: ({ token, new_password }) => api.resetPassword({ token, new_password }),
+    onSuccess: () => {
+      toast.success("Password reset successfully! You can now sign in.");
+      setMode("login");
+      setResetForm({ token: "", newPassword: "", confirmPassword: "" });
+    },
+    onError: (err) => toast.error(err.message || "Reset failed. The link may have expired."),
+  });
+
   const handleSignup = () => {
-    if (signup.password !== signup.confirmPassword) {
-      toast.error("Passwords don't match");
-      return;
-    }
-    if (signup.password.length < 8) {
-      toast.error("Password must be at least 8 characters");
-      return;
-    }
+    if (signup.password !== signup.confirmPassword) { toast.error("Passwords don't match"); return; }
+    if (signup.password.length < 8) { toast.error("Password must be at least 8 characters"); return; }
     signupMutation.mutate({
-      name: signup.name,
-      email: signup.email,
-      password: signup.password,
-      company_name: signup.company_name,
-      country: signup.country,
+      name: signup.name, email: signup.email, password: signup.password,
+      company_name: signup.company_name, country: signup.country,
     });
+  };
+
+  const handleForgot = () => {
+    if (!forgotEmail.trim()) { toast.error("Enter your email address"); return; }
+    forgotMutation.mutate(forgotEmail.trim());
+  };
+
+  const handleReset = () => {
+    if (resetForm.newPassword.length < 8) { toast.error("Password must be at least 8 characters"); return; }
+    if (resetForm.newPassword !== resetForm.confirmPassword) { toast.error("Passwords don't match"); return; }
+    resetMutation.mutate({ token: resetForm.token, new_password: resetForm.newPassword });
   };
 
   return (
     <div style={{
-      minHeight: "100vh",
-      display: "grid",
-      placeItems: "center",
-      padding: "2rem",
-      background: "var(--bg-deep)",
+      minHeight: "100vh", display: "grid", placeItems: "center",
+      padding: "2rem", background: "var(--bg-deep)",
     }}>
       <div style={{
         display: "grid",
@@ -82,12 +122,8 @@ export function AuthPage() {
           <div className="card" style={{
             padding: "3rem 2.5rem",
             borderRadius: "var(--radius-lg) 0 0 var(--radius-lg)",
-            background: "var(--accent)",
-            borderRight: "none",
-            display: "flex",
-            flexDirection: "column",
-            justifyContent: "center",
-            color: "#ffffff",
+            background: "var(--accent)", borderRight: "none",
+            display: "flex", flexDirection: "column", justifyContent: "center", color: "#ffffff",
           }}>
             <h1 className="font-display" style={{ fontSize: "2rem", color: "#ffffff", marginBottom: "0.75rem" }}>
               Reimburse
@@ -110,7 +146,8 @@ export function AuthPage() {
           padding: "2.5rem",
           borderRadius: mode === "signup" ? "0 var(--radius-lg) var(--radius-lg) 0" : "var(--radius-lg)",
         }}>
-          {mode === "login" ? (
+          {/* ─── Login ─── */}
+          {mode === "login" && (
             <>
               <div style={{ textAlign: "center", marginBottom: "1.75rem" }}>
                 <h1 className="font-display" style={{ fontSize: "1.75rem", color: "var(--accent)", marginBottom: "0.25rem" }}>Reimburse</h1>
@@ -123,14 +160,94 @@ export function AuthPage() {
                   {loginMutation.isPending ? "Signing in..." : "Sign In"}
                 </Button>
               </div>
-              <p style={{ marginTop: "1.5rem", textAlign: "center", fontSize: "0.8rem", color: "var(--text-muted)" }}>
+              <div style={{ marginTop: "1rem", textAlign: "center" }}>
+                <button
+                  onClick={() => setMode("forgot")}
+                  style={{
+                    color: "var(--accent)", background: "none", border: "none",
+                    cursor: "pointer", fontWeight: 600, fontFamily: "inherit", fontSize: "0.8rem",
+                  }}
+                >
+                  Forgot password?
+                </button>
+              </div>
+              <p style={{ marginTop: "1rem", textAlign: "center", fontSize: "0.8rem", color: "var(--text-muted)" }}>
                 Don't have an account?{" "}
                 <button onClick={() => setMode("signup")} style={{ color: "var(--accent)", background: "none", border: "none", cursor: "pointer", fontWeight: 600, fontFamily: "inherit" }}>
                   Create company
                 </button>
               </p>
             </>
-          ) : (
+          )}
+
+          {/* ─── Forgot Password ─── */}
+          {mode === "forgot" && (
+            <>
+              <div style={{ textAlign: "center", marginBottom: "1.75rem" }}>
+                <h1 className="font-display" style={{ fontSize: "1.75rem", color: "var(--accent)", marginBottom: "0.25rem" }}>Forgot Password</h1>
+                <p style={{ color: "var(--text-muted)", fontSize: "0.85rem" }}>
+                  Enter your email and we'll send you a reset link
+                </p>
+              </div>
+              <div style={{ display: "grid", gap: "0.85rem" }}>
+                <Input
+                  label="Email Address"
+                  type="email"
+                  placeholder="you@company.com"
+                  value={forgotEmail}
+                  onChange={(e) => setForgotEmail(e.target.value)}
+                />
+                <Button variant="primary" style={{ width: "100%", marginTop: "0.5rem" }} onClick={handleForgot}>
+                  {forgotMutation.isPending ? "Sending..." : "Send Reset Link"}
+                </Button>
+              </div>
+              <p style={{ marginTop: "1.5rem", textAlign: "center", fontSize: "0.8rem", color: "var(--text-muted)" }}>
+                Remember your password?{" "}
+                <button onClick={() => setMode("login")} style={{ color: "var(--accent)", background: "none", border: "none", cursor: "pointer", fontWeight: 600, fontFamily: "inherit" }}>
+                  Back to Sign In
+                </button>
+              </p>
+            </>
+          )}
+
+          {/* ─── Reset Password ─── */}
+          {mode === "reset" && (
+            <>
+              <div style={{ textAlign: "center", marginBottom: "1.75rem" }}>
+                <h1 className="font-display" style={{ fontSize: "1.75rem", color: "var(--accent)", marginBottom: "0.25rem" }}>Reset Password</h1>
+                <p style={{ color: "var(--text-muted)", fontSize: "0.85rem" }}>
+                  Enter your new password below
+                </p>
+              </div>
+              <div style={{ display: "grid", gap: "0.85rem" }}>
+                <Input
+                  label="New Password"
+                  type="password"
+                  placeholder="••••••••"
+                  value={resetForm.newPassword}
+                  onChange={(e) => setResetForm((p) => ({ ...p, newPassword: e.target.value }))}
+                />
+                <Input
+                  label="Confirm New Password"
+                  type="password"
+                  placeholder="••••••••"
+                  value={resetForm.confirmPassword}
+                  onChange={(e) => setResetForm((p) => ({ ...p, confirmPassword: e.target.value }))}
+                />
+                <Button variant="primary" style={{ width: "100%", marginTop: "0.5rem" }} onClick={handleReset}>
+                  {resetMutation.isPending ? "Resetting..." : "Reset Password"}
+                </Button>
+              </div>
+              <p style={{ marginTop: "1.5rem", textAlign: "center", fontSize: "0.8rem", color: "var(--text-muted)" }}>
+                <button onClick={() => setMode("login")} style={{ color: "var(--accent)", background: "none", border: "none", cursor: "pointer", fontWeight: 600, fontFamily: "inherit" }}>
+                  Back to Sign In
+                </button>
+              </p>
+            </>
+          )}
+
+          {/* ─── Signup ─── */}
+          {mode === "signup" && (
             <>
               <h2 className="font-display" style={{ fontSize: "1.35rem", marginBottom: "0.25rem" }}>Create Company</h2>
               <p style={{ color: "var(--text-muted)", fontSize: "0.85rem", marginBottom: "1.5rem" }}>Set up your organization</p>
