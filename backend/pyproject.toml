@@ -1,0 +1,24 @@
+[project]
+name = "backend"
+version = "0.1.0"
+description = "Reimbursement Management Backend"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+  "fastapi",
+  "uvicorn",
+  "sqlmodel",
+  "sqlalchemy",
+  "psycopg[binary]",
+  "pydantic-settings",
+  "email-validator",
+  "python-jose[cryptography]",
+  "passlib[bcrypt]",
+  "python-multipart",
+  "httpx",
+  "pytesseract",
+  "pillow"
+]
+
+[tool.uv]
+package = false
