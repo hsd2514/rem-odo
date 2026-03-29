@@ -145,6 +145,38 @@ class ApprovalLogResponse(BaseModel):
     timestamp: datetime
 
 
+class TimelineEventResponse(BaseModel):
+    id: str
+    event_type: str
+    actor_id: int | None = None
+    actor_name: str = ""
+    actor_role: str = ""
+    decision: str | None = None
+    comment: str = ""
+    message: str = ""
+    step_order: int | None = None
+    timestamp: datetime
+
+
+class ExpenseTimelineResponse(BaseModel):
+    expense_id: int
+    status: ExpenseStatus
+    events: list[TimelineEventResponse]
+
+
+class AuditStreamItemResponse(BaseModel):
+    id: str
+    event_type: str
+    expense_id: int
+    expense_description: str
+    actor_id: int | None = None
+    actor_name: str = ""
+    actor_role: str = ""
+    decision: str | None = None
+    message: str = ""
+    timestamp: datetime
+
+
 class ExpenseDetailResponse(BaseModel):
     expense: ExpenseResponse
     approval_logs: list[ApprovalLogResponse] = []

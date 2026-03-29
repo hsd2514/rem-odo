@@ -30,6 +30,20 @@ def _expense_to_dict(expense) -> ExpenseResponse:
     )
 
 
+def _can_view_expense(session: Session, current_user: User, expense: Expense) -> bool:
+    return (
+        current_user.role.value == "admin"
+        or expense.user_id == current_user.id
+        or session.exec(
+            select(EmployeeManagerMap).where(
+                EmployeeManagerMap.employee_id == expense.user_id,
+                EmployeeManagerMap.manager_id == current_user.id,
+            )
+        ).first()
+        is not None
+    )
+
+
 @router.post("/{expense_id}/approve", response_model=ExpenseResponse)
 def approve_expense(
     expense_id: int,
@@ -62,6 +76,58 @@ def reject_expense(
     return _expense_to_dict(expense)
 
 
+@router.post("/{expense_id}/override-approve", response_model=ExpenseResponse)
+def override_approve(
+    expense_id: int,
+    payload: ApprovalDecisionRequest,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(require_role("admin")),
+) -> ExpenseResponse:
+    expense = session.get(Expense, expense_id)
+    if not expense:
+        raise HTTPException(status_code=404, detail="Expense not found")
+
+    expense.status = "approved"
+    session.add(expense)
+    session.add(
+        ApprovalLog(
+            expense_id=expense.id,
+            approver_id=current_user.id,
+            decision="override_approved",
+            comment=payload.comment or "Approved by admin override",
+        )
+    )
+    session.commit()
+    session.refresh(expense)
+    return _expense_to_dict(expense)
+
+
+@router.post("/{expense_id}/override-reject", response_model=ExpenseResponse)
+def override_reject(
+    expense_id: int,
+    payload: ApprovalDecisionRequest,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(require_role("admin")),
+) -> ExpenseResponse:
+    expense = session.get(Expense, expense_id)
+    if not expense:
+        raise HTTPException(status_code=404, detail="Expense not found")
+
+    expense.status = "rejected"
+    session.add(expense)
+    session.add(
+        ApprovalLog(
+            expense_id=expense.id,
+            approver_id=current_user.id,
+            decision="override_rejected",
+            comment=payload.comment or "Rejected by admin override",
+        )
+    )
+    session.commit()
+    session.refresh(expense)
+    return _expense_to_dict(expense)
+
+
 @router.get("/{expense_id}/logs", response_model=list[ApprovalLogResponse])
 def approval_logs(
     expense_id: int,
@@ -72,17 +138,7 @@ def approval_logs(
     if not expense or expense.company_id != current_user.company_id:
         raise HTTPException(status_code=404, detail="Expense not found")
 
-    can_view = (
-        current_user.role.value == "admin"
-        or expense.user_id == current_user.id
-        or session.exec(
-            select(EmployeeManagerMap).where(
-                EmployeeManagerMap.employee_id == expense.user_id,
-                EmployeeManagerMap.manager_id == current_user.id,
-            )
-        ).first()
-        is not None
-    )
+    can_view = _can_view_expense(session, current_user, expense)
     if not can_view:
         raise HTTPException(status_code=403, detail="Permission denied")
 
@@ -114,17 +170,7 @@ def approval_steps(
     if not expense or expense.company_id != current_user.company_id:
         raise HTTPException(status_code=404, detail="Expense not found")
 
-    can_view = (
-        current_user.role.value == "admin"
-        or expense.user_id == current_user.id
-        or session.exec(
-            select(EmployeeManagerMap).where(
-                EmployeeManagerMap.employee_id == expense.user_id,
-                EmployeeManagerMap.manager_id == current_user.id,
-            )
-        ).first()
-        is not None
-    )
+    can_view = _can_view_expense(session, current_user, expense)
     if not can_view:
         raise HTTPException(status_code=403, detail="Permission denied")
 

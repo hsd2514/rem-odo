@@ -7,6 +7,7 @@ from app.core.database import get_session
 from app.deps import get_current_user, require_role
 from app.models import (
     ApprovalLog,
+    ApprovalStep,
     Company,
     EmployeeManagerMap,
     Expense,
@@ -16,10 +17,12 @@ from app.models import (
 )
 from app.schemas import (
     ApprovalLogResponse,
+    ExpenseTimelineResponse,
     ExpenseCreateRequest,
     ExpenseDetailResponse,
     ExpenseResponse,
     OCRResult,
+    TimelineEventResponse,
 )
 from app.services.currency import convert_currency
 from app.services.workflow import create_steps_for_expense
@@ -44,6 +47,18 @@ def _expense_to_response(expense: Expense, user_name: str = "") -> ExpenseRespon
         status=expense.status,
         submitted_at=expense.submitted_at,
     )
+
+
+def _can_view_expense(session: Session, current_user: User, expense: Expense) -> bool:
+    is_owner = expense.user_id == current_user.id
+    is_admin = current_user.role.value == "admin"
+    is_manager_of_owner = session.exec(
+        select(EmployeeManagerMap).where(
+            EmployeeManagerMap.employee_id == expense.user_id,
+            EmployeeManagerMap.manager_id == current_user.id,
+        )
+    ).first() is not None
+    return is_owner or is_admin or is_manager_of_owner
 
 
 @router.post("", response_model=ExpenseResponse)
@@ -221,15 +236,7 @@ def get_expense_detail(
     if expense.company_id != current_user.company_id:
         raise HTTPException(status_code=403, detail="Permission denied")
 
-    is_owner = expense.user_id == current_user.id
-    is_admin = current_user.role.value == "admin"
-    is_manager_of_owner = session.exec(
-        select(EmployeeManagerMap).where(
-            EmployeeManagerMap.employee_id == expense.user_id,
-            EmployeeManagerMap.manager_id == current_user.id,
-        )
-    ).first() is not None
-    if not (is_owner or is_admin or is_manager_of_owner):
+    if not _can_view_expense(session, current_user, expense):
         raise HTTPException(status_code=403, detail="Permission denied")
 
     user = session.get(User, expense.user_id)
@@ -258,3 +265,86 @@ def get_expense_detail(
         approval_logs=log_responses,
         receipt_url=receipt.file_path if receipt else None,
     )
+
+
+@router.get("/{expense_id}/timeline", response_model=ExpenseTimelineResponse)
+def get_expense_timeline(
+    expense_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> ExpenseTimelineResponse:
+    expense = session.get(Expense, expense_id)
+    if not expense:
+        raise HTTPException(status_code=404, detail="Expense not found")
+    if expense.company_id != current_user.company_id:
+        raise HTTPException(status_code=403, detail="Permission denied")
+    if not _can_view_expense(session, current_user, expense):
+        raise HTTPException(status_code=403, detail="Permission denied")
+
+    owner = session.get(User, expense.user_id)
+    steps = session.exec(
+        select(ApprovalStep).where(ApprovalStep.expense_id == expense.id).order_by(ApprovalStep.sequence_order.asc())
+    ).all()
+    logs = session.exec(
+        select(ApprovalLog).where(ApprovalLog.expense_id == expense.id).order_by(ApprovalLog.timestamp.asc())
+    ).all()
+
+    events: list[TimelineEventResponse] = [
+        TimelineEventResponse(
+            id=f"expense-created-{expense.id}",
+            event_type="expense_created",
+            actor_id=owner.id if owner else None,
+            actor_name=owner.name if owner else "",
+            actor_role=owner.role.value if owner else "",
+            message="Expense created as draft",
+            timestamp=expense.submitted_at,
+        )
+    ]
+
+    if expense.status != ExpenseStatus.draft:
+        events.append(
+            TimelineEventResponse(
+                id=f"expense-submitted-{expense.id}",
+                event_type="expense_submitted",
+                actor_id=owner.id if owner else None,
+                actor_name=owner.name if owner else "",
+                actor_role=owner.role.value if owner else "",
+                message="Expense submitted for approval",
+                timestamp=expense.submitted_at,
+            )
+        )
+
+    for step in steps:
+        approver = session.get(User, step.approver_id)
+        events.append(
+            TimelineEventResponse(
+                id=f"step-{step.id}",
+                event_type="approval_step",
+                actor_id=step.approver_id,
+                actor_name=approver.name if approver else "",
+                actor_role=approver.role.value if approver else "",
+                message=f"Step {step.sequence_order} assigned",
+                step_order=step.sequence_order,
+                timestamp=expense.submitted_at,
+            )
+        )
+
+    for log in logs:
+        approver = session.get(User, log.approver_id)
+        is_override = log.decision.startswith("override_")
+        events.append(
+            TimelineEventResponse(
+                id=f"log-{log.id}",
+                event_type="override" if is_override else "approval_decision",
+                actor_id=log.approver_id,
+                actor_name=approver.name if approver else "",
+                actor_role=approver.role.value if approver else "",
+                decision=log.decision,
+                comment=log.comment,
+                message="Admin override performed" if is_override else "Approval decision recorded",
+                timestamp=log.timestamp,
+            )
+        )
+
+    events = sorted(events, key=lambda item: item.timestamp)
+    return ExpenseTimelineResponse(expense_id=expense.id, status=expense.status, events=events)

@@ -93,6 +93,8 @@ export const api = {
   myExpenses: () => request("/expenses/my"),
   teamExpenses: () => request("/expenses/team"),
   getExpenseDetail: (id) => request(`/expenses/${id}`),
+  getExpenseTimeline: (id) => request(`/expenses/${id}/timeline`),
+  auditStream: (limit = 100) => request(`/audit/stream?limit=${limit}`),
   uploadReceipt: (file) => {
     const formData = new FormData();
     formData.append("file", file);
@@ -104,6 +106,10 @@ export const api = {
     request(`/approvals/${expenseId}/approve`, { method: "POST", body: JSON.stringify({ comment }) }),
   reject: (expenseId, comment = "") =>
     request(`/approvals/${expenseId}/reject`, { method: "POST", body: JSON.stringify({ comment }) }),
+  overrideApprove: (expenseId, comment = "") =>
+    request(`/approvals/${expenseId}/override-approve`, { method: "POST", body: JSON.stringify({ comment }) }),
+  overrideReject: (expenseId, comment = "") =>
+    request(`/approvals/${expenseId}/override-reject`, { method: "POST", body: JSON.stringify({ comment }) }),
   approvalLogs: (expenseId) => request(`/approvals/${expenseId}/logs`),
   approvalSteps: (expenseId) => request(`/approvals/${expenseId}/steps`),
 };

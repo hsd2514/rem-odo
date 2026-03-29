@@ -18,6 +18,7 @@ export function AdminPage() {
   const [pwModal, setPwModal] = useState(null);
 
   const usersQuery = useQuery({ queryKey: ["users"], queryFn: api.users });
+  const auditQuery = useQuery({ queryKey: ["audit-stream"], queryFn: () => api.auditStream(40) });
 
   const userMutation = useMutation({
     mutationFn: api.createUser,
@@ -135,6 +136,51 @@ export function AdminPage() {
             )}
           </tbody>
         </table>
+      </div>
+
+      {/* Audit Stream */}
+      <div className="card" style={{ marginTop: "1.5rem", padding: "1.25rem", borderLeft: "4px solid var(--accent)" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.85rem" }}>
+          <h3 className="font-display" style={{ fontSize: "1.1rem", margin: 0 }}>Company Audit Stream</h3>
+          <span style={{ fontSize: "0.72rem", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+            Real-time activity
+          </span>
+        </div>
+        {auditQuery.isLoading ? (
+          <p style={{ color: "var(--text-muted)", fontSize: "0.82rem" }}>Loading audit events...</p>
+        ) : (auditQuery.data || []).length === 0 ? (
+          <p style={{ color: "var(--text-muted)", fontSize: "0.82rem" }}>No audit events yet.</p>
+        ) : (
+          <div style={{ display: "grid", gap: "0.55rem", maxHeight: "360px", overflow: "auto", paddingRight: "0.3rem" }}>
+            {(auditQuery.data || []).map((item) => (
+              <div
+                key={item.id}
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "160px 1fr auto",
+                  gap: "0.75rem",
+                  alignItems: "start",
+                  borderBottom: "1px dashed var(--border)",
+                  paddingBottom: "0.45rem",
+                }}
+              >
+                <Badge status={item.event_type === "override" ? "rejected" : "pending"}>{item.event_type}</Badge>
+                <div style={{ fontSize: "0.82rem" }}>
+                  <strong>{item.actor_name || "System"}</strong>
+                  {item.actor_role ? ` (${item.actor_role})` : ""}
+                  {`: ${item.message}`}
+                  {item.decision ? ` [${item.decision}]` : ""}
+                  <div style={{ color: "var(--text-muted)", marginTop: "0.15rem" }}>
+                    Expense #{item.expense_id}: {item.expense_description}
+                  </div>
+                </div>
+                <span style={{ fontSize: "0.72rem", color: "var(--text-muted)", whiteSpace: "nowrap" }}>
+                  {new Date(item.timestamp).toLocaleString()}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Password Modal */}

@@ -10,6 +10,7 @@ import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
 import { Tabs } from "../components/ui/tabs";
 import { Modal } from "../components/ui/modal";
+import { TimelinePanel } from "../components/ui/timeline-panel";
 import { Plus, Upload, Send, FileText } from "lucide-react";
 
 export function EmployeePage() {
@@ -108,8 +109,11 @@ export function EmployeePage() {
 
   const loadDetail = async (expense) => {
     try {
-      const detail = await api.getExpenseDetail(expense.id);
-      setSelectedExpense(detail);
+      const [detail, timeline] = await Promise.all([
+        api.getExpenseDetail(expense.id),
+        api.getExpenseTimeline(expense.id),
+      ]);
+      setSelectedExpense({ ...detail, timeline });
     } catch {
       setSelectedExpense({ expense, approval_logs: [] });
     }
@@ -305,6 +309,7 @@ export function EmployeePage() {
                 </tbody>
               </table>
             )}
+            <TimelinePanel timeline={selectedExpense.timeline} />
 
             {/* Submit button for drafts */}
             {selectedExpense.expense.status === "draft" && (

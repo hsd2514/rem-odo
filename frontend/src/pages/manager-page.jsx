@@ -1,17 +1,20 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "../context/toast-context";
+import { useAuth } from "../context/auth-context";
 import { AppShell } from "../components/layout/app-shell";
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
 import { Modal } from "../components/ui/modal";
 import { Textarea } from "../components/ui/textarea";
+import { TimelinePanel } from "../components/ui/timeline-panel";
 import { api } from "../lib/api";
 import { CheckCircle, XCircle, Eye } from "lucide-react";
 
 export function ManagerPage() {
   const qc = useQueryClient();
   const toast = useToast();
+  const { role } = useAuth();
   const [commentModal, setCommentModal] = useState(null); // { id, action }
   const [comment, setComment] = useState("");
   const [selectedExpense, setSelectedExpense] = useState(null);
@@ -40,10 +43,36 @@ export function ManagerPage() {
     onError: (err) => toast.error(err.message),
   });
 
+  const overrideApproveMutation = useMutation({
+    mutationFn: ({ id, comment }) => api.overrideApprove(id, comment),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["team-expenses"] });
+      toast.success("Admin override approval saved");
+      setCommentModal(null);
+      setComment("");
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const overrideRejectMutation = useMutation({
+    mutationFn: ({ id, comment }) => api.overrideReject(id, comment),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["team-expenses"] });
+      toast.success("Admin override rejection saved");
+      setCommentModal(null);
+      setComment("");
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
   const handleAction = () => {
     if (!commentModal) return;
     if (commentModal.action === "approve") {
       approveMutation.mutate({ id: commentModal.id, comment });
+    } else if (commentModal.action === "override-approve") {
+      overrideApproveMutation.mutate({ id: commentModal.id, comment });
+    } else if (commentModal.action === "override-reject") {
+      overrideRejectMutation.mutate({ id: commentModal.id, comment });
     } else {
       rejectMutation.mutate({ id: commentModal.id, comment });
     }
@@ -51,8 +80,11 @@ export function ManagerPage() {
 
   const loadDetail = async (expense) => {
     try {
-      const detail = await api.getExpenseDetail(expense.id);
-      setSelectedExpense(detail);
+      const [detail, timeline] = await Promise.all([
+        api.getExpenseDetail(expense.id),
+        api.getExpenseTimeline(expense.id),
+      ]);
+      setSelectedExpense({ ...detail, timeline });
     } catch {
       setSelectedExpense({ expense, approval_logs: [] });
     }
@@ -118,6 +150,16 @@ export function ManagerPage() {
                       <Button size="xs" variant="danger" onClick={() => setCommentModal({ id: item.id, action: "reject" })}>
                         <XCircle size={11} /> Reject
                       </Button>
+                      {role === "admin" && (
+                        <>
+                          <Button size="xs" onClick={() => setCommentModal({ id: item.id, action: "override-approve" })}>
+                            Override +Approve
+                          </Button>
+                          <Button size="xs" onClick={() => setCommentModal({ id: item.id, action: "override-reject" })}>
+                            Override +Reject
+                          </Button>
+                        </>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -164,7 +206,15 @@ export function ManagerPage() {
       <Modal
         open={!!commentModal}
         onClose={() => { setCommentModal(null); setComment(""); }}
-        title={commentModal?.action === "approve" ? "Approve Expense" : "Reject Expense"}
+        title={
+          commentModal?.action === "approve"
+            ? "Approve Expense"
+            : commentModal?.action === "reject"
+              ? "Reject Expense"
+              : commentModal?.action === "override-approve"
+                ? "Admin Override Approve"
+                : "Admin Override Reject"
+        }
       >
         <Textarea
           label="Comment (optional)"
@@ -174,10 +224,10 @@ export function ManagerPage() {
         />
         <div style={{ marginTop: "1rem", display: "flex", gap: "0.5rem" }}>
           <Button
-            variant={commentModal?.action === "approve" ? "success" : "danger"}
+            variant={commentModal?.action === "approve" || commentModal?.action === "override-approve" ? "success" : "danger"}
             onClick={handleAction}
           >
-            {commentModal?.action === "approve" ? (
+            {commentModal?.action === "approve" || commentModal?.action === "override-approve" ? (
               <><CheckCircle size={14} /> Confirm Approval</>
             ) : (
               <><XCircle size={14} /> Confirm Rejection</>
@@ -236,6 +286,7 @@ export function ManagerPage() {
                 </tbody>
               </table>
             )}
+            <TimelinePanel timeline={selectedExpense.timeline} />
           </div>
         )}
       </Modal>
