@@ -52,7 +52,7 @@ def analytics_summary(
     category: str | None = Query(None),
     user_id: int | None = Query(None),
     session: Session = Depends(get_session),
-    _: User = Depends(require_role("admin")),
+    _: User = Depends(require_role("admin", "manager", "employee")),
     current_user: User = Depends(get_current_user),
 ) -> AnalyticsSummary:
     base = select(Expense)
@@ -86,7 +86,7 @@ def monthly_spend(
     category: str | None = Query(None),
     user_id: int | None = Query(None),
     session: Session = Depends(get_session),
-    _: User = Depends(require_role("admin")),
+    _: User = Depends(require_role("admin", "manager", "employee")),
     current_user: User = Depends(get_current_user),
 ) -> list[MonthlySpendItem]:
     base = select(Expense).where(Expense.company_id == current_user.company_id)
@@ -140,7 +140,7 @@ def category_breakdown(
     month: str | None = Query(None, description="YYYY-MM"),
     user_id: int | None = Query(None),
     session: Session = Depends(get_session),
-    _: User = Depends(require_role("admin")),
+    _: User = Depends(require_role("admin", "manager", "employee")),
     current_user: User = Depends(get_current_user),
 ) -> list[CategoryBreakdownItem]:
     base = select(Expense)
@@ -174,7 +174,7 @@ def team_breakdown(
     month: str | None = Query(None, description="YYYY-MM"),
     category: str | None = Query(None),
     session: Session = Depends(get_session),
-    _: User = Depends(require_role("admin")),
+    _: User = Depends(require_role("admin", "manager", "employee")),
     current_user: User = Depends(get_current_user),
 ) -> list[TeamBreakdownItem]:
     base = select(Expense)
@@ -224,7 +224,7 @@ def top_spenders(
     category: str | None = Query(None),
     limit: int = Query(5, ge=1, le=50),
     session: Session = Depends(get_session),
-    _: User = Depends(require_role("admin")),
+    _: User = Depends(require_role("admin", "manager", "employee")),
     current_user: User = Depends(get_current_user),
 ) -> list[TopSpenderItem]:
     base = select(Expense)
