@@ -12,6 +12,57 @@ import { Tabs } from "../components/ui/tabs";
 import { Modal } from "../components/ui/modal";
 import { Plus, Upload, Send, FileText } from "lucide-react";
 
+const POLICY_CONFIG = {
+  defaultSoftLimit: 15000,
+  categorySoftLimits: {
+    Food: 8000,
+    Travel: 25000,
+    Lodging: 30000,
+    Miscellaneous: 10000,
+  },
+  receiptRequiredAbove: 5000,
+  remarksRecommendedAbove: 12000,
+  maxAgeDays: 30,
+};
+
+function buildPolicyWarnings(expense, detail = null) {
+  if (!expense) return [];
+
+  const warnings = [];
+  const baseAmount = Number(expense.converted_amount || 0);
+  const baseCurrency = expense.base_currency || "base currency";
+  const category = expense.category || "Miscellaneous";
+
+  const categoryLimit =
+    POLICY_CONFIG.categorySoftLimits[category] ?? POLICY_CONFIG.defaultSoftLimit;
+
+  if (baseAmount > categoryLimit) {
+    warnings.push(
+      `Amount is above suggested ${category} limit (${categoryLimit} ${baseCurrency}).`
+    );
+  }
+
+  if (baseAmount >= POLICY_CONFIG.receiptRequiredAbove && !detail?.receipt_url) {
+    warnings.push(
+      `Receipt is missing for an expense above ${POLICY_CONFIG.receiptRequiredAbove} ${baseCurrency}.`
+    );
+  }
+
+  if (baseAmount >= POLICY_CONFIG.remarksRecommendedAbove && !String(expense.remarks || "").trim()) {
+    warnings.push("Remarks are recommended for high-value submissions.");
+  }
+
+  const expenseDate = new Date(expense.expense_date);
+  if (!Number.isNaN(expenseDate.getTime())) {
+    const daysOld = Math.floor((Date.now() - expenseDate.getTime()) / (1000 * 60 * 60 * 24));
+    if (daysOld > POLICY_CONFIG.maxAgeDays) {
+      warnings.push(`Expense date is older than ${POLICY_CONFIG.maxAgeDays} days.`);
+    }
+  }
+
+  return warnings;
+}
+
 function getExpenseLifecycle(status) {
   const normalized = String(status || "draft").toLowerCase();
   const isRejected = normalized === "rejected";
@@ -75,6 +126,7 @@ export function EmployeePage() {
   const [tab, setTab] = useState("all");
   const [showForm, setShowForm] = useState(false);
   const [selectedExpense, setSelectedExpense] = useState(null);
+  const [submitWarnings, setSubmitWarnings] = useState(null); // { expenseId, description, warnings[] }
   const [form, setForm] = useState({
     amount: "",
     category: "Food",
@@ -171,6 +223,34 @@ export function EmployeePage() {
     }
   };
 
+  const detailWarnings = useMemo(() => {
+    if (!selectedExpense?.expense) return [];
+    return buildPolicyWarnings(selectedExpense.expense, selectedExpense);
+  }, [selectedExpense]);
+
+  const submitWithPolicyCheck = async (expense) => {
+    let detail = null;
+    try {
+      detail = await api.getExpenseDetail(expense.id);
+    } catch {
+      detail = null;
+    }
+
+    const warnings = buildPolicyWarnings(expense, detail);
+    if (warnings.length > 0) {
+      setSubmitWarnings({
+        expenseId: expense.id,
+        description: expense.description,
+        warnings,
+      });
+      toast.info("Submitted with policy warnings. Please review details.", { key: `policy-warning-${expense.id}` });
+    } else {
+      setSubmitWarnings(null);
+    }
+
+    submitMutation.mutate(expense.id);
+  };
+
   return (
     <AppShell>
       <input type="file" ref={fileRef} hidden accept="image/*" onChange={handleFileChange} />
@@ -261,6 +341,27 @@ export function EmployeePage() {
         />
       </div>
 
+      {submitWarnings && (
+        <div className="policy-warning-banner" style={{ marginBottom: "1rem" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", gap: "1rem" }}>
+            <div>
+              <p style={{ margin: 0, fontWeight: 700, fontSize: "0.82rem", color: "var(--warning)" }}>
+                Policy Warnings (non-blocking)
+              </p>
+              <p style={{ margin: "0.25rem 0 0", fontSize: "0.78rem", color: "var(--text-secondary)" }}>
+                {submitWarnings.description}
+              </p>
+            </div>
+            <Button size="xs" variant="ghost" onClick={() => setSubmitWarnings(null)}>Dismiss</Button>
+          </div>
+          <ul style={{ margin: "0.5rem 0 0", paddingLeft: "1rem", color: "var(--text-secondary)", fontSize: "0.78rem" }}>
+            {submitWarnings.warnings.map((warning) => (
+              <li key={warning} style={{ marginBottom: "0.2rem" }}>{warning}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       <div className="card" style={{ overflow: "hidden" }}>
         <div className="expense-table-wrap">
           <table>
@@ -297,7 +398,7 @@ export function EmployeePage() {
                           <FileText size={11} /> View
                         </Button>
                         {item.status === "draft" && (
-                          <Button size="xs" variant="primary" onClick={() => submitMutation.mutate(item.id)}>
+                          <Button size="xs" variant="primary" onClick={() => submitWithPolicyCheck(item)}>
                             <Send size={11} /> Submit
                           </Button>
                         )}
@@ -344,7 +445,7 @@ export function EmployeePage() {
                     <FileText size={11} /> View
                   </Button>
                   {item.status === "draft" && (
-                    <Button size="xs" variant="primary" onClick={() => submitMutation.mutate(item.id)}>
+                    <Button size="xs" variant="primary" onClick={() => submitWithPolicyCheck(item)}>
                       <Send size={11} /> Submit
                     </Button>
                   )}
@@ -386,6 +487,19 @@ export function EmployeePage() {
               <ExpenseLifecycleTracker status={selectedExpense.expense.status} />
             </div>
 
+            {detailWarnings.length > 0 && (
+              <div className="policy-warning-banner" style={{ marginBottom: "1.25rem" }}>
+                <p style={{ margin: 0, fontWeight: 700, fontSize: "0.82rem", color: "var(--warning)" }}>
+                  Policy Warnings (non-blocking)
+                </p>
+                <ul style={{ margin: "0.45rem 0 0", paddingLeft: "1rem", color: "var(--text-secondary)", fontSize: "0.8rem" }}>
+                  {detailWarnings.map((warning) => (
+                    <li key={warning} style={{ marginBottom: "0.25rem" }}>{warning}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
             {selectedExpense.expense.remarks && (
               <div style={{ marginBottom: "1.5rem" }}>
                 <span className="label">Remarks</span>
@@ -420,7 +534,7 @@ export function EmployeePage() {
             {/* Submit button for drafts */}
             {selectedExpense.expense.status === "draft" && (
               <div style={{ marginTop: "1.25rem" }}>
-                <Button variant="primary" onClick={() => submitMutation.mutate(selectedExpense.expense.id)}>
+                <Button variant="primary" onClick={() => submitWithPolicyCheck(selectedExpense.expense)}>
                   <Send size={14} />
                   Submit for Approval
                 </Button>
