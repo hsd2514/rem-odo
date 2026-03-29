@@ -102,10 +102,10 @@ export function EmployeePage() {
     mutationFn: (id) => api.submitExpense(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["my-expenses"] });
-      toast.success("Expense submitted for approval");
+      toast.success("Submission successful: expense sent for approval.", { key: "submit-success" });
       setSelectedExpense(null);
     },
-    onError: (err) => toast.error(err.message),
+    onError: (err) => toast.error(`Submission failed: ${err.message}`, { key: "submit-error" }),
   });
 
   const uploadMutation = useMutation({
