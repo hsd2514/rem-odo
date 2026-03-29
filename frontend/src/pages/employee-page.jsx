@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api";
 import { useToast } from "../context/toast-context";
@@ -11,8 +11,8 @@ import { Badge } from "../components/ui/badge";
 import { Tabs } from "../components/ui/tabs";
 import { Modal } from "../components/ui/modal";
 import { TimelinePanel } from "../components/ui/timeline-panel";
-import { Plus, Upload, Send, FileText, ScanLine, X, ImageIcon, AlertTriangle } from "lucide-react";
-
+import { Plus, Upload, Send, FileText, ScanLine, X, ImageIcon, AlertTriangle, Eye } from "lucide-react";
+ 
 /**
  * Shown inside the expense form when the uploaded receipt matches an
  * existing one in the company's history (within 90 days).
@@ -39,8 +39,7 @@ function DuplicateWarningBanner({ warning, onDismiss }) {
           Potential duplicate receipt detected
         </p>
         <p style={{ margin: "0.2rem 0 0", fontSize: "0.78rem", color: "#78350f", lineHeight: 1.5 }}>
-          This receipt looks identical to an existing expense:
-          {" "}
+          This receipt looks identical to an existing expense:{" "}
           <strong>{warning.duplicate_description}</strong>
           {" — "}
           {warning.duplicate_amount} {warning.duplicate_currency}
@@ -81,7 +80,7 @@ function parseOCRDate(dateStr) {
   if (!isNaN(iso.getTime())) return iso.toISOString().slice(0, 16);
 
   // DD/MM/YYYY or DD-MM-YYYY or DD.MM.YYYY
-  const dmy = cleaned.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})$/);
+  const dmy = cleaned.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2,4})$/);
   if (dmy) {
     const [, d, m, y] = dmy;
     const year = y.length === 2 ? `20${y}` : y;
@@ -100,7 +99,7 @@ function ReceiptUploadZone({ onFile, uploading, preview, onClear }) {
       e.preventDefault();
       setDragging(false);
       const file = e.dataTransfer.files?.[0];
-      if (file && file.type.startsWith("image/")) onFile(file);
+      if (file && (file.type.startsWith("image/") || file.type === "application/pdf")) onFile(file);
     },
     [onFile]
   );
@@ -190,7 +189,7 @@ function ReceiptUploadZone({ onFile, uploading, preview, onClear }) {
       <input
         ref={inputRef}
         type="file"
-        accept="image/*"
+        accept="image/*,application/pdf"
         hidden
         onChange={(e) => {
           const f = e.target.files?.[0];
@@ -216,11 +215,139 @@ function ReceiptUploadZone({ onFile, uploading, preview, onClear }) {
             {dragging ? "Drop receipt here" : "Upload Receipt"}
           </span>
           <span style={{ fontSize: "0.74rem", opacity: 0.7 }}>
-            Drag & drop or click · JPG, PNG, WEBP
+            Drag & drop or click · JPG, PNG, WEBP, PDF
           </span>
         </div>
       )}
     </div>
+  );
+}
+
+function ReceiptPreviewDrawer({
+  open,
+  previewUrl,
+  previewName,
+  previewMime,
+  onToggle,
+  onClose,
+}) {
+  const isPdf = previewMime === "application/pdf" || (previewUrl || "").toLowerCase().includes(".pdf");
+  return (
+    <aside
+      id="receipt-preview-drawer"
+      aria-hidden={!open}
+      style={{
+        border: "1px solid var(--border)",
+        borderRadius: "var(--radius-sm)",
+        background: "var(--surface-raised)",
+        padding: "0.85rem",
+        display: "flex",
+        flexDirection: "column",
+        gap: "0.75rem",
+        minHeight: "220px",
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.5rem" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
+          <Eye size={14} />
+          <span style={{ fontSize: "0.8rem", fontWeight: 700 }}>Receipt preview</span>
+        </div>
+        <button
+          onClick={onClose}
+          aria-label="Close receipt preview"
+          style={{
+            background: "none",
+            border: "none",
+            cursor: "pointer",
+            color: "var(--text-muted)",
+            display: "flex",
+          }}
+        >
+          <X size={14} />
+        </button>
+      </div>
+      <div style={{ fontSize: "0.7rem", color: "var(--text-muted)", display: "flex", justifyContent: "space-between" }}>
+        <span>{previewName || "No file selected"}</span>
+        <span>Alt + P</span>
+      </div>
+
+      {!previewUrl ? (
+        <div
+          style={{
+            flex: 1,
+            borderRadius: "var(--radius-sm)",
+            border: "1px dashed var(--border)",
+            display: "grid",
+            placeItems: "center",
+            color: "var(--text-muted)",
+            fontSize: "0.75rem",
+            minHeight: "180px",
+          }}
+        >
+          Upload a receipt to preview it here.
+        </div>
+      ) : (
+        <div style={{
+          flex: 1,
+          borderRadius: "var(--radius-sm)",
+          overflow: "hidden",
+          border: "1px solid var(--border)",
+          background: "#fff",
+          minHeight: "260px",
+          display: "grid",
+          placeItems: "center",
+        }}>
+          {isPdf ? (
+            <iframe
+              title="Receipt PDF preview"
+              src={previewUrl}
+              style={{ width: "100%", height: "320px", border: "none" }}
+            />
+          ) : (
+            <img
+              src={previewUrl}
+              alt="Receipt preview"
+              style={{ width: "100%", height: "100%", objectFit: "contain" }}
+            />
+          )}
+        </div>
+      )}
+
+      <div style={{ display: "flex", justifyContent: "space-between", gap: "0.5rem" }}>
+        <button
+          onClick={onToggle}
+          aria-controls="receipt-preview-drawer"
+          aria-expanded={open}
+          style={{
+            background: "var(--accent-soft)",
+            border: "1px solid rgba(30,64,175,0.15)",
+            borderRadius: "6px",
+            padding: "0.35rem 0.6rem",
+            fontSize: "0.7rem",
+            fontWeight: 600,
+            color: "var(--accent)",
+            cursor: "pointer",
+          }}
+        >
+          {open ? "Hide preview" : "Show preview"}
+        </button>
+        {previewUrl && (
+          <a
+            href={previewUrl}
+            target="_blank"
+            rel="noreferrer"
+            style={{
+              fontSize: "0.7rem",
+              color: "var(--text-secondary)",
+              textDecoration: "none",
+              alignSelf: "center",
+            }}
+          >
+            Open full size
+          </a>
+        )}
+      </div>
+    </aside>
   );
 }
 
@@ -298,7 +425,9 @@ export function EmployeePage() {
   // Receipt state for the new expense form
   const [pendingReceiptId, setPendingReceiptId] = useState(null);
   const [receiptPreview, setReceiptPreview] = useState(null); // local object URL
+  const [receiptMeta, setReceiptMeta] = useState({ name: "", type: "" });
   const [duplicateWarning, setDuplicateWarning] = useState(null); // duplicate detection result
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   const [form, setForm] = useState({
     amount: "",
@@ -369,7 +498,10 @@ export function EmployeePage() {
       }));
 
       // Local preview
+      if (receiptPreview) URL.revokeObjectURL(receiptPreview);
       setReceiptPreview(URL.createObjectURL(file));
+      setReceiptMeta({ name: file?.name || "Receipt", type: file?.type || "" });
+      setDrawerOpen(true);
       setShowForm(true);
     },
     onError: (err) => toast.error("OCR failed: " + err.message),
@@ -388,7 +520,9 @@ export function EmployeePage() {
     setPendingReceiptId(null);
     if (receiptPreview) URL.revokeObjectURL(receiptPreview);
     setReceiptPreview(null);
+    setReceiptMeta({ name: "", type: "" });
     setDuplicateWarning(null);
+    setDrawerOpen(false);
   };
 
   const handleReceiptFile = (file) => {
@@ -399,10 +533,29 @@ export function EmployeePage() {
     setPendingReceiptId(null);
     if (receiptPreview) URL.revokeObjectURL(receiptPreview);
     setReceiptPreview(null);
+    setReceiptMeta({ name: "", type: "" });
     setDuplicateWarning(null);
+    setDrawerOpen(false);
   };
 
-  const expenses = expensesQuery.data || [];
+  useEffect(() => {
+    if (!showForm) return;
+    const handler = (e) => {
+      const tag = e.target?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      if (e.altKey && e.key.toLowerCase() === "p") {
+        e.preventDefault();
+        setDrawerOpen((prev) => !prev);
+      }
+      if (e.key === "Escape" && drawerOpen) {
+        setDrawerOpen(false);
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [showForm, drawerOpen]);
+
+  const expenses = useMemo(() => expensesQuery.data || [], [expensesQuery.data]);
   const filtered = useMemo(() => {
     if (tab === "all") return expenses;
     return expenses.filter((e) => e.status === tab);
@@ -463,6 +616,21 @@ export function EmployeePage() {
           flex-shrink: 0;
         }
         .receipt-thumb:hover { transform: scale(1.08); }
+        .expense-form-grid {
+          display: grid;
+          grid-template-columns: 220px minmax(0, 1fr);
+          gap: 1rem;
+          align-items: start;
+        }
+        .expense-form-grid.with-drawer {
+          grid-template-columns: 220px minmax(0, 1fr) 320px;
+        }
+        @media (max-width: 1100px) {
+          .expense-form-grid,
+          .expense-form-grid.with-drawer {
+            grid-template-columns: 1fr;
+          }
+        }
       `}</style>
 
       {/* Header */}
@@ -515,12 +683,22 @@ export function EmployeePage() {
                 </span>
               )}
             </div>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+              <Button
+                size="xs"
+                onClick={() => setDrawerOpen((prev) => !prev)}
+                aria-controls="receipt-preview-drawer"
+                aria-expanded={drawerOpen}
+              >
+                <Eye size={11} /> {drawerOpen ? "Hide Preview" : "Show Preview"}
+              </Button>
             <Button size="xs" onClick={() => { setShowForm(false); resetForm(); }}>
               <X size={11} /> Close
             </Button>
+            </div>
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "200px 1fr", gap: "1rem", alignItems: "start" }}>
+          <div className={`expense-form-grid${drawerOpen ? " with-drawer" : ""}`}>
             {/* Receipt Upload Zone */}
             <div>
               <span className="label" style={{ marginBottom: "0.4rem" }}>
@@ -590,6 +768,17 @@ export function EmployeePage() {
                 />
               </div>
             </div>
+
+            {drawerOpen && (
+              <ReceiptPreviewDrawer
+                open={drawerOpen}
+                previewUrl={receiptPreview}
+                previewName={receiptMeta.name}
+                previewMime={receiptMeta.type}
+                onToggle={() => setDrawerOpen((prev) => !prev)}
+                onClose={() => setDrawerOpen(false)}
+              />
+            )}
           </div>
 
           <DuplicateWarningBanner
